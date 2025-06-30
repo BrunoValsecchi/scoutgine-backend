@@ -23,6 +23,10 @@
       "dest": "/static/$1"
     },
     {
+      "src": "/admin",
+      "dest": "scoutgine/wsgi.py"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "scoutgine/wsgi.py"
     },
