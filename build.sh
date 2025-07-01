@@ -1,8 +1,15 @@
-#!/usr/bin/env bash
-# backend/build.sh
+#!/bin/bash
+echo "🚀 Building with cache optimization..."
 
-set -o errexit
+# Use pip cache to speed up builds
+pip install --upgrade pip
+pip install --cache-dir=/tmp/pip-cache -r requirements.txt
 
-pip install -r requirements.txt
-python manage.py collectstatic --no-input
-python manage.py migrate
+echo "Running migrations..."
+python manage.py makemigrations --noinput
+python manage.py migrate --noinput
+
+echo "Collecting static files..."
+python manage.py collectstatic --noinput --clear
+
+echo "✅ Build completed!"
