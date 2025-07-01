@@ -123,7 +123,6 @@ if not DEBUG:
 # CORS_ALLOWED_ORIGINS = [...]
 
 # Permitir todos los hosts temporalmente
-ALLOWED_HOSTS = ['*']
 
 # REST FRAMEWORK
 REST_FRAMEWORK = {
