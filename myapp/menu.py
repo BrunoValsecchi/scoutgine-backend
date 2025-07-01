@@ -13,7 +13,7 @@ from myapp.grafico import grafico
 
 
 import json
-import numpy as np
+# import numpy as np
 import os
 from django.conf import settings
 

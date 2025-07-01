@@ -42,7 +42,6 @@ def ligas(request):
     from .ligas import ligas as ligas_func
     return ligas_func(request)
 
-import numpy as np
 
 def comparacion(request):
     # ✅ Usar la función de comparacion.py en lugar de duplicar lógica
@@ -324,22 +323,32 @@ def generar_graficos_completos(equipo, estadistica, valor_equipo, equipos_nombre
     
     # 3. PERCENTILES
     try:
-        valores_ordenados = sorted(equipos_valores)
-        percentiles = [25, 50, 75, 90]
-        valores_percentiles = []
+        # Calcular percentiles con Python nativo
+        def calcular_percentil(valores_ordenados, percentil):
+            """Calcula percentil usando Python nativo"""
+            if not valores_ordenados:
+                return 0
+            n = len(valores_ordenados)
+            k = (percentil / 100) * (n - 1)
+            f = int(k)
+            c = k - f
+            if f == n - 1:
+                return valores_ordenados[f]
+            return valores_ordenados[f] * (1 - c) + valores_ordenados[f + 1] * c
         
-        for p in percentiles:
-            index = int(len(valores_ordenados) * p / 100)
-            if index < len(valores_ordenados):
-                valores_percentiles.append(valores_ordenados[index])
-            else:
-                valores_percentiles.append(valores_ordenados[-1])
+        # Asegurar que equipos_valores está ordenado
+        equipos_valores_ordenados = sorted(equipos_valores)
+        
+        # Calcular quartiles
+        q1 = calcular_percentil(equipos_valores_ordenados, 25)
+        q2 = calcular_percentil(equipos_valores_ordenados, 50)
+        q3 = calcular_percentil(equipos_valores_ordenados, 75)
         
         percentil_chart = (
             Bar(init_opts=opts.InitOpts(width="100%", height="350px", theme="dark"))
-            .add_xaxis([f"P{p}" for p in percentiles])
-            .add_yaxis("Liga", valores_percentiles, color="#95a5a6")
-            .add_yaxis(equipo.nombre, [valor_equipo] * 4, color=color)
+            .add_xaxis(["Q1", "Mediana", "Q3"])
+            .add_yaxis("Liga", [q1, q2, q3], color="#95a5a6")
+            .add_yaxis(equipo.nombre, [valor_equipo] * 3, color=color)
             .set_global_opts(
                 title_opts=opts.TitleOpts(
                     title=f"🎯 Distribución - {estadistica}",
@@ -627,13 +636,34 @@ def ajax_boxplot_estadistica(request):
     stat_id = request.GET.get('stat_id')
     equipo_id = request.GET.get('equipo_id')
     equipos_valores, valor_equipo = get_stats_data(stat_id, equipo_id)
+    
     if not equipos_valores:
         return JsonResponse({'success': False, 'error': 'Sin datos'})
+    
+    # Calcular percentiles con Python nativo
+    def calcular_percentil(valores_ordenados, percentil):
+        """Calcula percentil usando Python nativo"""
+        if not valores_ordenados:
+            return 0
+        n = len(valores_ordenados)
+        k = (percentil / 100) * (n - 1)
+        f = int(k)
+        c = k - f
+        if f == n - 1:
+            return valores_ordenados[f]
+        return valores_ordenados[f] * (1 - c) + valores_ordenados[f + 1] * c
+    
+    # Asegurar que equipos_valores está ordenado
+    equipos_valores_ordenados = sorted(equipos_valores)
+    
+    # Calcular quartiles
+    q1 = calcular_percentil(equipos_valores_ordenados, 25)
+    q2 = calcular_percentil(equipos_valores_ordenados, 50)
+    q3 = calcular_percentil(equipos_valores_ordenados, 75)
+    
     # Boxplot: min, Q1, median, Q3, max
-    q1 = np.percentile(equipos_valores, 25)
-    q2 = np.percentile(equipos_valores, 50)
-    q3 = np.percentile(equipos_valores, 75)
     box = [min(equipos_valores), q1, q2, q3, max(equipos_valores)]
+    
     return JsonResponse({
         'success': True,
         'stat': stat_id,

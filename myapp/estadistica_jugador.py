@@ -507,14 +507,31 @@ def ajax_boxplot_jugador(request):
                 'error': f'No hay suficientes datos para {estadistica} en posición {posicion}'
             })
         
-        # Calcular estadísticas para el boxplot
-        import numpy as np
-        q1 = np.percentile(valores, 25)
-        median = np.percentile(valores, 50)
-        q3 = np.percentile(valores, 75)
+        # Calcular estadísticas para el boxplot con Python nativo
+        def calcular_percentil(valores_ordenados, percentil):
+            """Calcula percentil usando Python nativo"""
+            if not valores_ordenados:
+                return 0
+            n = len(valores_ordenados)
+            k = (percentil / 100) * (n - 1)
+            f = int(k)
+            c = k - f
+            if f == n - 1:
+                return valores_ordenados[f]
+            return valores_ordenados[f] * (1 - c) + valores_ordenados[f + 1] * c
+        
+        # Asegurar que valores está ordenado
+        valores_ordenados = sorted(valores)
+        
+        # Calcular quartiles
+        q1 = calcular_percentil(valores_ordenados, 25)
+        median = calcular_percentil(valores_ordenados, 50)
+        q3 = calcular_percentil(valores_ordenados, 75)
+        
+        # Calcular IQR y whiskers
         iqr = q3 - q1
-        lower_whisker = max(min(valores), q1 - 1.5 * iqr)
-        upper_whisker = min(max(valores), q3 + 1.5 * iqr)
+        lower_whisker = max(min(valores_ordenados), q1 - 1.5 * iqr)
+        upper_whisker = min(max(valores_ordenados), q3 + 1.5 * iqr)
         
         # Valor del jugador actual
         try:
