@@ -8,13 +8,6 @@
         "maxLambdaSize": "15mb", 
         "runtime": "python3.9"
       }
-    },
-    {
-      "src": "build_files.sh",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "staticfiles_build"
-      }
     }
   ],
   "routes": [
@@ -23,7 +16,7 @@
       "dest": "/static/$1"
     },
     {
-      "src": "/admin",
+      "src": "/admin/(.*)",
       "dest": "scoutgine/wsgi.py"
     },
     {
@@ -34,10 +27,5 @@
       "src": "/(.*)",
       "dest": "scoutgine/wsgi.py"
     }
-  ],
-  "functions": {
-    "scoutgine/wsgi.py": {
-      "runtime": "python3.9"
-    }
-  }
+  ]
 }
