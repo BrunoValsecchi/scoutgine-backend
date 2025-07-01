@@ -16,26 +16,20 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.http import JsonResponse
-
-def api_root(request):
-    """Vista para la raíz de la API"""
-    return JsonResponse({
-        'message': 'ScoutGine API Backend',
-        'status': 'running',
-        'version': '1.0.0',
-        'endpoints': {
-            'admin': '/admin/',
-            'api': '/api/',
-            'jugadores': '/jugadores/',
-            'equipos': '/equipos/',
-            'ligas': '/ligas/',
-        }
-    })
+from django.views.generic import TemplateView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', api_root, name='api_root'),  # Página principal
-    path('api/', api_root, name='api_info'),  # Info de API
-    path('', include('myapp.urls')),  # Incluir URLs de tu app
+    
+    # AJAX APIs - MANTENER CON PREFIJO
+    path('ajax/', include('myapp.urls')),
+    
+    # FRONTEND PAGES - SERVIDAS POR WHITENOISE
+    path('', TemplateView.as_view(template_name='index.html'), name='frontend_home'),
+    path('menu/', TemplateView.as_view(template_name='menu.html'), name='frontend_menu'),
+    path('ligas/', TemplateView.as_view(template_name='ligas.html'), name='frontend_ligas'),
+    path('recomendacion/', TemplateView.as_view(template_name='recomendacion.html'), name='frontend_recomendacion'),
+    path('comparacion/', TemplateView.as_view(template_name='comparacion.html'), name='frontend_comparacion'),
+    path('equipo/', TemplateView.as_view(template_name='equipo.html'), name='frontend_equipo'),
+    path('grafico/', TemplateView.as_view(template_name='grafico.html'), name='frontend_grafico'),
 ]

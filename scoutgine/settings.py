@@ -37,11 +37,12 @@ INSTALLED_APPS = [
     'myapp',
 ]
 
+# MIDDLEWARE - AGREGAR WHITENOISE
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # ← AGREGAR ESTA LÍNEA
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -51,13 +52,21 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'scoutgine.urls'
 
-# TEMPLATES - SIN FRONTEND
+# STATIC FILES - CONFIGURACIÓN WHITENOISE
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # WhiteNoise servirá desde aquí
+
+# AGREGAR FRONTEND
+STATICFILES_DIRS = [
+    BASE_DIR.parent / 'frontend' / 'app' / 'static',  # ← RUTA A TU FRONTEND
+]
+
+# TEMPLATES - AGREGAR FRONTEND
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            os.path.join(BASE_DIR, 'templates'),
-            # ELIMINADO: referencia al frontend
+            BASE_DIR.parent / 'frontend' / 'app' / 'templates',  # ← AGREGAR ESTA LÍNEA
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -110,9 +119,12 @@ TIME_ZONE = 'America/Argentina/Buenos_Aires'
 USE_I18N = True
 USE_TZ = True
 
-# STATIC FILES - CONFIGURACIÓN CORRECTA PARA RENDER
-STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# WHITENOISE - CONFIGURACIÓN AVANZADA
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Opcional: Para servir archivos adicionales
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = True if DEBUG else False
 
 # NO CORS para prueba inicial - comentar temporalmente
 # CORS_ALLOWED_ORIGINS = [...]

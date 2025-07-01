@@ -4,11 +4,26 @@ from .grafico_equipo import ajax_radar_equipo
 from .estadistica_jugador import *
 from . import comparacion
 from .statsequipo import stats_equipos  # ← IMPORTAR DIRECTAMENTE
+from django.http import JsonResponse
 
+
+
+def api_status(request):
+    """Endpoint simple para verificar conexión"""
+    return JsonResponse({
+        'status': 'connected',
+        'message': 'Backend funcionando correctamente',
+        'timestamp': str(timezone.now()) if 'timezone' in globals() else 'N/A'
+    })
 
 
 urlpatterns = [
-    path('', views.home, name='home'), 
+    # path('', views.home, name='home'),  # ← MANTENER COMENTADO
+    
+    # AGREGAR ENDPOINT DE STATUS
+    path('status/', api_status, name='api_status'),
+    
+    # APIs existentes
     path('grafico/', views.grafico, name='grafico'),
     path('menu/', views.menu, name='menu'),
     path('ligas/', views.ligas, name='ligas'),
