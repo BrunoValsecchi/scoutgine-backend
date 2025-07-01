@@ -110,16 +110,10 @@ TIME_ZONE = 'America/Argentina/Buenos_Aires'
 USE_I18N = True
 USE_TZ = True
 
-# STATIC FILES - SOLO PARA DJANGO
+# STATIC FILES - CONFIGURACIÓN CORRECTA PARA RENDER
 STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# CONFIGURACIÓN SIMPLIFICADA PARA VERCEL
-# Deshabilitar archivos estáticos completamente
-if not DEBUG:
-    # Deshabilitar collectstatic en producción
-    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
-    STATIC_ROOT = None
-    
 # NO CORS para prueba inicial - comentar temporalmente
 # CORS_ALLOWED_ORIGINS = [...]
 
