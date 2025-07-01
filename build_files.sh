@@ -1,11 +1,11 @@
 #!/bin/bash
 
 echo "Building the project..."
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 
 echo "Make Migration..."
-python manage.py makemigrations --noinput
-python manage.py migrate --noinput
+python3 manage.py makemigrations --noinput
+python3 manage.py migrate --noinput
 
 echo "Collect Static..."
-python manage.py collectstatic --noinput --clear
+python3 manage.py collectstatic --noinput --clear
