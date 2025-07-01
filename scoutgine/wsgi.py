@@ -1,19 +1,27 @@
 """
 WSGI config for scoutgine project.
-
-It exposes the WSGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/5.2/howto/deployment/wsgi/
+Compatible with Vercel deployment.
 """
 
 import os
+import sys
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'scoutgine.settings')
+# Configurar Django settings
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "scoutgine.settings")
 
-application = get_wsgi_application()
+# Inicializar aplicación Django
+try:
+    application = get_wsgi_application()
+except Exception as e:
+    print(f"Error initializing Django application: {e}")
+    raise
 
-# Para Vercel - crear alias de la variable application
+# Variables requeridas por Vercel
 app = application
 handler = application
+
+# Para compatibilidad con diferentes runtimes
+def lambda_handler(event, context):
+    """Handler para AWS Lambda/Vercel Functions"""
+    return application(event, context)
