@@ -14,12 +14,13 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-e#05*yxmix1!k!p678nu(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-# HOSTS PERMITIDOS PARA VERCEL
+# HOSTS PERMITIDOS - ACTUALIZAR PARA RENDER
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '.vercel.app',
-    '.now.sh',
+    '.render.com',           # 👈 AGREGAR ESTO
+    'scoutgine-backend.onrender.com',  # 👈 TU URL DE RENDER
     '*'  # Temporal para debug
 ]
 
@@ -133,15 +134,17 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20
 }
 
-# CORS CONFIGURATION - Para conectar con frontend
+# CORS CONFIGURATION - ACTUALIZAR CON TU FRONTEND
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Para desarrollo local
+    "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://tu-frontend-scoutgine.vercel.app",  # Cambia por tu URL real
+    "https://scoutgine-frontend.vercel.app",  # Si usas Vercel
+    "https://scoutgine-frontend.netlify.app", # Si usas Netlify
+    "https://scoutgine-frontend.onrender.com", # Si usas Render
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False  # Solo para desarrollo, cambiar a False en producción
+CORS_ALLOW_ALL_ORIGINS = False
 
 # Headers permitidos
 CORS_ALLOWED_HEADERS = [
