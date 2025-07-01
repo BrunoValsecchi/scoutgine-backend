@@ -7,7 +7,7 @@ from django.views.decorators.http import require_POST
 from .models import Posicion, Equipo, EstadisticasEquipo, Jugador
 import json
 import random
-import numpy as np
+# import numpy as np
 from .estadistica_jugador import grafico_jugador_view
 from .comparacion import GRUPOS_STATS, GRUPOS_STATS_EQUIPOS, GRUPOS_STATS_JUGADORES# ============================================================================
 # VISTAS PRINCIPALES

@@ -1,7 +1,7 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from .models import Equipo, EstadisticasEquipo
-import numpy as np
+# import numpy as np
 
 RADAR_GROUPS = {
     "ofensivos": [

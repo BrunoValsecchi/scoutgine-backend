@@ -1,6 +1,6 @@
 from django.shortcuts import render
 import datetime
-import pandas as pd
+# import pandas as pd
 import requests
 from pyecharts.charts import Bar, Radar  
 from pyecharts import options as opts

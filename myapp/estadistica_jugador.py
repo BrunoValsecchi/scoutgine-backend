@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from .models import EstadisticasJugador, Jugador
 import json
 import random
-import numpy as np
+# import numpy as np
 
 # Puedes poner esto como constantes en tu models.py o en un archivo utils.py
 
@@ -277,8 +277,9 @@ def ajax_radar_jugador(request):
 
     def calcular_percentil(valores, valor_jugador):
         if not valores or valor_jugador is None:
-            return 0
-        return int(round(100 * (np.sum(np.array(valores) < valor_jugador) / len(valores))))
+            return 50
+        valores_menores = sum(1 for v in valores if v < valor_jugador)
+        return round(100 * (valores_menores / len(valores)))
 
     for campo in campos:
         # Solo jugadores con esa posición (en cualquier parte de la cadena)
