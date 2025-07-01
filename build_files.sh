@@ -1,11 +1,10 @@
 #!/bin/bash
 
-echo "Building the project..."
+echo "Installing dependencies..."
 pip3 install -r requirements.txt
 
-echo "Make Migration..."
+echo "Running migrations..."
 python3 manage.py makemigrations --noinput
 python3 manage.py migrate --noinput
 
-echo "Collect Static..."
-python3 manage.py collectstatic --noinput --clear
+echo "Build completed!"

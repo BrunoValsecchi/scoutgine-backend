@@ -111,23 +111,19 @@ USE_TZ = True
 
 # STATIC FILES - SOLO PARA DJANGO
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# NO STATICFILES_DIRS - no hay frontend aquí
-# ELIMINADO: STATICFILES_DIRS
-# ELIMINADO: todo el bloque de debug print
+# CONFIGURACIÓN SIMPLIFICADA PARA VERCEL
+# Deshabilitar archivos estáticos completamente
+if not DEBUG:
+    # Deshabilitar collectstatic en producción
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+    STATIC_ROOT = None
+    
+# NO CORS para prueba inicial - comentar temporalmente
+# CORS_ALLOWED_ORIGINS = [...]
 
-# Storage simple para producción
-STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
-
-# CORS CONFIGURATION
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://scoutgine-frontend.vercel.app",
-]
-
-CORS_ALLOW_CREDENTIALS = True
+# Permitir todos los hosts temporalmente
+ALLOWED_HOSTS = ['*']
 
 # REST FRAMEWORK
 REST_FRAMEWORK = {
@@ -137,5 +133,28 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20
 }
+
+# CORS CONFIGURATION - Para conectar con frontend
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # Para desarrollo local
+    "http://127.0.0.1:3000",
+    "https://tu-frontend-scoutgine.vercel.app",  # Cambia por tu URL real
+]
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False  # Solo para desarrollo, cambiar a False en producción
+
+# Headers permitidos
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
