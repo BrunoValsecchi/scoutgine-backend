@@ -84,8 +84,6 @@ def calcular_estadisticas_cards(jugador, estadistica):
         'Toques en área rival': 'touches_in_opposition_box',
         'Tiros de esquina': 'corners_taken',
         'Rating': 'average_rating',
-        'Partidos jugados': 'appearances',
-        'Minutos jugados': 'minutes_played',
         'Posesión promedio': 'possession_percentage',
         'Toques totales': 'touches',
         'Duelos ganados': 'duels_won_percentage',

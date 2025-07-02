@@ -1,35 +1,41 @@
 """
-URL configuration for scoutgine project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+URL configuration for scoutgine project - API BACKEND ONLY
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic import TemplateView
+from django.http import JsonResponse
+from django.conf import settings
+from django.conf.urls.static import static
+
+def api_root(request):
+    return JsonResponse({
+        'message': 'ScoutGine API Backend',
+        'version': '1.0',
+        'status': 'active',
+        'endpoints': {
+            'ligas': '/ajax/ligas/',
+            'equipos': '/ajax/equipos/',
+            'jugadores': '/ajax/jugadores/',
+            'stats_equipos': '/stats_equipos/',
+            'stats_jugadores': '/stats_jugadores/',
+            'recomendacion': '/ajax/recomendacion/',
+            'comparacion': '/ajax/comparacion/',
+            'equipo_detalle': '/equipo_detalle/<id>/',  # ✅ AGREGAR ESTA LÍNEA
+        },
+        'frontend_url': 'https://scoutgine-frontend.onrender.com'
+    })
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', api_root, name='api_root'),
     
-    # AJAX APIs - MANTENER CON PREFIJO
+    # ✅ RUTAS AJAX (van primero para evitar conflictos)
     path('ajax/', include('myapp.urls')),
     
-    # FRONTEND PAGES - SERVIDAS POR WHITENOISE
-    path('', TemplateView.as_view(template_name='index.html'), name='frontend_home'),
-    path('menu/', TemplateView.as_view(template_name='menu.html'), name='frontend_menu'),
-    path('ligas/', TemplateView.as_view(template_name='ligas.html'), name='frontend_ligas'),
-    path('recomendacion/', TemplateView.as_view(template_name='recomendacion.html'), name='frontend_recomendacion'),
-    path('comparacion/', TemplateView.as_view(template_name='comparacion.html'), name='frontend_comparacion'),
-    path('equipo/', TemplateView.as_view(template_name='equipo.html'), name='frontend_equipo'),
-    path('grafico/', TemplateView.as_view(template_name='grafico.html'), name='frontend_grafico'),
+    # ✅ RUTAS DE PÁGINAS (van después)
+    path('', include('myapp.urls')),  # Para otras páginas HTML
 ]
+
+# ✅ SERVIR ARCHIVOS ESTÁTICOS EN DESARROLLO
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None)

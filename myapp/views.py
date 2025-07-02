@@ -33,10 +33,21 @@ def equipo(request):
 def equipo_detalle(request, equipo_id):
     """Vista para mostrar un equipo individual"""
     try:
-        from .equipo import equipo_detalle as equipo_detalle_func
-        return equipo_detalle_func(request, equipo_id)
+        equipo = get_object_or_404(Equipo, id=equipo_id)
+        context = {
+            'equipo': equipo,
+            'equipo_id': equipo_id,
+            'page_title': f'{equipo.nombre} | ScoutGine'
+        }
+        return render(request, 'equipo_detalle.html', context)
     except Exception as e:
-        return render(request, "equipo_detalle.html", {'error': str(e)})
+        print(f"❌ Error en equipo_detalle: {e}")
+        context = {
+            'error': f'Error cargando equipo: {str(e)}',
+            'equipo_id': equipo_id,
+            'page_title': 'Error | ScoutGine'
+        }
+        return render(request, 'equipo_detalle.html', context)
 
 def ligas(request):
     from .ligas import ligas as ligas_func
@@ -50,8 +61,9 @@ def comparacion(request):
 
 
 def stats_jugadores(request):
-    from .statsjugadores import stats_jugadores as stats_jugadores_func
-    return stats_jugadores_func(request)
+    """Vista para estadísticas de jugadores - delegada a helper"""
+    from .api_helpers import stats_jugadores_wrapper
+    return stats_jugadores_wrapper(request)
 
 def jugadores(request):
     from .jugadores import jugadores as jugadores_func
@@ -97,158 +109,46 @@ def posiciones_api(request):
 # GRÁFICOS DE ESTADÍSTICAS
 # ============================================================================
 
-def grafico_equipo(request, equipo_id, stat_name):
-    """Vista para mostrar gráfico de estadística específica de un equipo"""
+def grafico_equipo(request, equipo_id, stat_name=None, estadistica=None):
+    """Vista para mostrar gráfico de estadística de equipo"""
     try:
-        equipo = get_object_or_404(Equipo, id=equipo_id)
+        # Usar el parámetro correcto
+        stat_to_use = stat_name or estadistica
         
-        # Decodificar el nombre de la estadística desde la URL
-        from urllib.parse import unquote
-        stat_name = unquote(stat_name)
+        print(f"🎯 grafico_equipo llamado con equipo_id={equipo_id}, stat={stat_to_use}")
         
-        # ✅ Inicializar variables correctamente
-        stat_value = None
-        posicion = None
-        total_equipos = 0
-        equipos_valores = []
-        promedio = 0
+        if not stat_to_use:
+            return JsonResponse({
+                'error': 'Estadística no especificada',
+                'status': 'error'
+            }, status=400)
         
-        # Mapeo de nombres de estadísticas a campos de base de datos
-        STAT_MAPPING = {
-            "Goles por partido": "goals_per_match",
-            "Tiros al arco por partido": "shots_on_target_per_match",
-            "Ocasiones claras": "big_chances",
-            "Ocasiones claras falladas": "big_chances_missed",
-            "Goles esperados (xG)": "expected_goals_xg",
-            "Penales a favor": "penalties_awarded",
-            "Goles concedidos por partido": "goals_conceded_per_match",
-            "Vallas invictas": "clean_sheets",
-            "xG concedido": "expected_goals_conceded_xgc",
-            "Intercepciones por partido": "interceptions_per_match",
-            "Entradas exitosas por partido": "tackles_won_per_match",
-            "Despejes por partido": "clearances_per_match",
-            "Recuperaciones en el último tercio": "recoveries_final_third",
-            "Atajadas por partido": "saves_per_match",
-            "Pases precisos por partido": "accurate_passes_per_match",
-            "Pases largos precisos por partido": "accurate_long_balls_per_match",
-            "Centros precisos por partido": "accurate_crosses_per_match",
-            "Toques en el área rival": "touches_in_opposition_box",
-            "Tiros de esquina": "corners_taken",
-            "Rating": "average_rating",
-            "Posesión promedio": "average_possession",
-            "Faltas por partido": "fouls_per_match",
-            "Tarjetas amarillas": "yellow_cards",
-            "Tarjetas rojas": "red_cards",
-        }
-        
-        # Obtener el campo de base de datos correspondiente
-        campo_bd = STAT_MAPPING.get(stat_name)
-        if not campo_bd:
-            print(f"❌ Estadística no encontrada: {stat_name}")
-            return render(request, 'estadistica_detalle.html', {
-                'equipo': equipo,
-                'stat_name': stat_name,
-                'title': f"{stat_name} - {equipo.nombre}",
-                'error': f"Estadística '{stat_name}' no encontrada",
-                'stat_value': None,
-                'posicion': None,
-                'total_equipos': 0,
-                'promedio': 0,
-            })
-        
+        # Verificar que el equipo existe
         try:
-            # Obtener estadísticas del equipo
-            equipo_stats = EstadisticasEquipo.objects.filter(equipo=equipo).first()
-            
-            if equipo_stats:
-                # ✅ Obtener valor de forma segura
-                raw_value = getattr(equipo_stats, campo_bd, None)
-                if raw_value is not None:
-                    try:
-                        stat_value = float(raw_value)
-                        if isinstance(raw_value, float):
-                            stat_value = round(stat_value, 2)
-                        else:
-                            stat_value = int(stat_value)
-                    except (ValueError, TypeError):
-                        stat_value = 0
-                        print(f"⚠️ Error convertiendo valor: {raw_value}")
-                
-                print(f"📊 Valor del equipo {equipo.nombre}: {stat_value}")
-            else:
-                print(f"❌ No hay estadísticas para el equipo {equipo.nombre}")
+            equipo = Equipo.objects.get(id=equipo_id)
+        except Equipo.DoesNotExist:
+            return JsonResponse({
+                'error': f'Equipo con ID {equipo_id} no encontrado',
+                'status': 'error'
+            }, status=404)
         
-        except Exception as e:
-            print(f"❌ Error obteniendo estadísticas del equipo: {e}")
-            stat_value = None
-        
-        # Obtener valores de todos los equipos para comparación
-        try:
-            all_stats = EstadisticasEquipo.objects.all()
-            equipos_valores = []
-            
-            for stats in all_stats:
-                try:
-                    valor = getattr(stats, campo_bd, None)
-                    if valor is not None:
-                        equipos_valores.append(float(valor))
-                except (ValueError, TypeError, AttributeError):
-                    continue
-            
-            total_equipos = len(equipos_valores)
-            
-            # Calcular promedio
-            if equipos_valores:
-                promedio = round(sum(equipos_valores) / len(equipos_valores), 2)
-            
-            # Calcular posición si tenemos el valor del equipo
-            if stat_value is not None and equipos_valores:
-                valores_ordenados = sorted(equipos_valores, reverse=True)
-                try:
-                    posicion = valores_ordenados.index(float(stat_value)) + 1
-                except ValueError:
-                    # Si el valor exacto no está, encontrar la posición aproximada
-                    posicion = sum(1 for v in valores_ordenados if v > stat_value) + 1
-            
-            print(f"📊 Estadísticas: valor={stat_value}, posición={posicion}/{total_equipos}, promedio={promedio}")
-        
-        except Exception as e:
-            print(f"❌ Error calculando comparaciones: {e}")
-            equipos_valores = []
-            total_equipos = 0
-            promedio = 0
-            posicion = None
-        
-        # ✅ Preparar contexto completo para estadistica_detalle.html
-        context = {
-            'equipo': equipo,
-            'stat_name': stat_name,
-            'title': f"{stat_name} - {equipo.nombre}",
-            'stat_value': stat_value,
-            'posicion': posicion,
-            'total_equipos': total_equipos,
-            'promedio': promedio,
-            'error': None if stat_value is not None else f"No hay datos para {stat_name}",
-        }
-        
-        print(f"✅ Contexto final: {stat_name} = {stat_value}, pos: {posicion}")
-        return render(request, 'estadistica_detalle.html', context)  # ✅ Usar el template correcto
+        # ✅ USAR EL TEMPLATE CORRECTO: estadistica_detalle.html
+        return render(request, 'estadistica_detalle.html', {
+            'equipo_id': equipo_id,
+            'equipo_nombre': equipo.nombre,
+            'stat_name': stat_to_use,
+            'page_title': f'{stat_to_use} - {equipo.nombre}'
+        })
         
     except Exception as e:
         print(f"❌ Error general en grafico_equipo: {e}")
         import traceback
         traceback.print_exc()
         
-        return render(request, 'estadistica_detalle.html', {
-            'equipo': equipo if 'equipo' in locals() else None,
-            'stat_name': stat_name if 'stat_name' in locals() else 'Estadística',
-            'title': f"Error - {stat_name if 'stat_name' in locals() else 'Estadística'}",
-            'stat_value': None,
-            'posicion': None,
-            'total_equipos': 0,
-            'promedio': 0,
-            'error': f"Error cargando estadística: {str(e)}",
-        })
+        return JsonResponse({
+            'error': f'Error interno: {str(e)}',
+            'status': 'error'
+        }, status=500)
 def generar_graficos_completos(equipo, estadistica, valor_equipo, equipos_nombres, equipos_valores, estadisticas_obj):
     """Genera todos los gráficos para la estadística"""
     from pyecharts.charts import Bar, Line, Gauge
@@ -464,7 +364,6 @@ def generar_graficos_completos(equipo, estadistica, valor_equipo, equipos_nombre
 # AJAX ENDPOINTS
 # ============================================================================
 
-@csrf_exempt  # Solo para pruebas, luego usa CSRF correctamente
 def ajax_grafico_dispersion(request):
     if request.method == 'POST':
         try:
@@ -571,7 +470,6 @@ def ajax_grafico_dispersion(request):
             return JsonResponse({'success': False, 'error': str(e)})
     return JsonResponse({'success': False, 'error': 'Método no permitido'})
 
-@csrf_exempt
 @require_POST  
 def ajax_analisis_correlacion(request):
     """Vista AJAX para análisis de correlación"""
@@ -788,3 +686,1125 @@ def ajax_recomendar_jugadores(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+def ajax_equipos(request):
+    """API para obtener lista de equipos en formato JSON"""
+    try:
+        equipos_bd = Equipo.objects.all().order_by('nombre')
+        equipos = []
+        for equipo_bd in equipos_bd:
+            equipos.append({
+                'id': equipo_bd.id,
+                'nombre': equipo_bd.nombre,
+                'nombre_corto': equipo_bd.nombre_corto or equipo_bd.nombre[:15],
+                'logo': equipo_bd.logo if equipo_bd.logo else None,
+                'liga': equipo_bd.liga
+            })
+        return JsonResponse({
+            'equipos': equipos,
+            'total_equipos': len(equipos),
+            'status': 'success'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+def ajax_equipo_detalle(request, equipo_id):
+    """API para obtener detalle de un equipo específico"""
+    try:
+        equipo = Equipo.objects.get(id=equipo_id)
+        
+        # Obtener estadísticas del equipo
+        estadisticas_obj = EstadisticasEquipo.objects.filter(equipo=equipo).first()
+        
+        # Obtener posición en tabla (simulado)
+        posicion = 1  # Aquí puedes calcular la posición real
+        puntos = 45   # Aquí puedes calcular los puntos reales
+        
+        equipo_data = {
+            'id': equipo.id,
+            'nombre': equipo.nombre,
+            'nombre_corto': equipo.nombre_corto,
+            'logo': equipo.logo,
+            'liga': equipo.liga,
+            'posicion': posicion,
+            'puntos': puntos,
+            'rating': estadisticas_obj.fotmob_rating if estadisticas_obj else None,
+            'goles_promedio': estadisticas_obj.goals_per_match if estadisticas_obj else None,
+            'goles_concedidos_promedio': estadisticas_obj.goals_conceded_per_match if estadisticas_obj else None,
+            'posesion_promedio': estadisticas_obj.average_possession if estadisticas_obj else None,
+            'vallas_invictas': estadisticas_obj.clean_sheets if estadisticas_obj else None,
+            'tiros_arco_promedio': estadisticas_obj.shots_on_target_per_match if estadisticas_obj else None,
+            'pases_precisos_promedio': estadisticas_obj.accurate_passes_per_match if estadisticas_obj else None,
+            'faltas_promedio': estadisticas_obj.fouls_per_match if estadisticas_obj else None,
+        }
+        
+        return JsonResponse({
+            'equipo': equipo_data,
+            'status': 'success'
+        })
+        
+    except Equipo.DoesNotExist:
+        return JsonResponse({
+            'error': 'Equipo no encontrado',
+            'status': 'error'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+def ajax_equipo_plantilla(request, equipo_id):
+    """API para obtener la plantilla de un equipo"""
+    try:
+        equipo = get_object_or_404(Equipo, id=equipo_id)
+        
+        # Obtener jugadores ordenados por posición
+        orden_posiciones = [
+            "GK", "CB", "RB", "LB", "DM", "CM", "LM", "RM", "AM", "LW", "RW", "ST"
+        ]
+        
+        jugadores = Jugador.objects.filter(equipo=equipo)
+        
+        def orden_jugador(j):
+            pos = (j.posicion or "").split(",")[0].strip().upper()
+            try:
+                idx = orden_posiciones.index(pos)
+            except ValueError:
+                idx = len(orden_posiciones)
+            return idx, j.nombre.lower()
+        
+        jugadores_ordenados = sorted(jugadores, key=orden_jugador)
+        
+        jugadores_data = []
+        for jugador in jugadores_ordenados:
+            jugadores_data.append({
+                'id': jugador.id,
+                'nombre': jugador.nombre,
+                'posicion': jugador.posicion,
+                'edad': jugador.edad,
+                'dorsal': jugador.dorsal,
+                'pais': jugador.pais,
+                'altura': jugador.altura,
+                'valor': jugador.valor
+            })
+        
+        return JsonResponse({
+            'jugadores': jugadores_data,
+            'total_jugadores': len(jugadores_data),
+            'equipo': {
+                'id': equipo.id,
+                'nombre': equipo.nombre
+            },
+            'status': 'success'
+        })
+        
+    except Equipo.DoesNotExist:
+        return JsonResponse({
+            'error': 'Equipo no encontrado',
+            'status': 'error'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+def ajax_equipo_estadisticas(request, equipo_id):
+    """API para obtener estadísticas detalladas de un equipo"""
+    try:
+        equipo = get_object_or_404(Equipo, id=equipo_id)
+        estadisticas_obj = EstadisticasEquipo.objects.filter(equipo=equipo).first()
+        
+        if not estadisticas_obj:
+            return JsonResponse({
+                'error': 'No hay estadísticas disponibles para este equipo',
+                'status': 'error'
+            }, status=404)
+        
+        # Traducciones de campos
+        traducciones = {
+            'fotmob_rating': 'Rating FotMob',
+            'goals_per_match': 'Goles por partido',
+            'goals_conceded_per_match': 'Goles concedidos por partido',
+            'average_possession': 'Posesión promedio',
+            'clean_sheets': 'Vallas invictas',
+            'expected_goals_xg': 'Goles esperados (xG)',
+            'shots_on_target_per_match': 'Tiros al arco por partido',
+            'big_chances': 'Ocasiones claras',
+            'big_chances_missed': 'Ocasiones claras falladas',
+            'accurate_passes_per_match': 'Pases precisos por partido',
+            'penalties_awarded': 'Penales a favor',
+            'touches_in_opposition_box': 'Toques en área rival',
+            'corners': 'Tiros de esquina',
+            'interceptions_per_match': 'Intercepciones por partido',
+            'successful_tackles_per_match': 'Entradas exitosas por partido'
+        }
+        
+        estadisticas = {}
+        exclude = ['id', 'equipo']
+        
+        for field in estadisticas_obj._meta.fields:
+            name = field.name
+            if name not in exclude:
+                value = getattr(estadisticas_obj, name)
+                if value is not None:
+                    label = traducciones.get(name, name.replace("_", " ").capitalize())
+                    estadisticas[label] = value
+        
+        return JsonResponse({
+            'estadisticas': estadisticas,
+            'equipo': {
+                'id': equipo.id,
+                'nombre': equipo.nombre
+            },
+            'status': 'success'
+        })
+        
+    except Equipo.DoesNotExist:
+        return JsonResponse({
+            'error': 'Equipo no encontrado',
+            'status': 'error'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+def equipo_detalle_view(request, equipo_id):
+    """Vista HTML para mostrar la página de detalle de un equipo"""
+    try:
+        equipo = get_object_or_404(Equipo, id=equipo_id)
+        context = {
+            'equipo': equipo,
+            'equipo_id': equipo_id,
+            'page_title': f'{equipo.nombre} | ScoutGine'
+        }
+        return render(request, 'equipo_detalle.html', context)
+    except Exception as e:
+        context = {
+            'error': f'Error cargando equipo: {str(e)}',
+            'equipo_id': equipo_id,
+            'page_title': 'Error | ScoutGine'
+        }
+        return render(request, 'equipo_detalle.html', context)
+
+def ajax_equipo_info(request, equipo_id):
+    """API para obtener información básica de un equipo"""
+    try:
+        equipo = get_object_or_404(Equipo, id=equipo_id)
+        
+        equipo_data = {
+            'id': equipo.id,
+            'nombre': equipo.nombre,
+            'nombre_corto': equipo.nombre_corto or equipo.nombre[:15],
+            'liga': equipo.liga,
+            'logo': equipo.logo if equipo.logo else None,
+        }
+        
+        return JsonResponse({
+            'equipo': equipo_data,
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        print(f"❌ Error en ajax_equipo_info: {e}")
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+def ajax_equipo_estadistica_detalle(request, equipo_id, estadistica):
+    """API para obtener detalle de una estadística específica de un equipo"""
+    try:
+        if not equipo_id or not estadistica:
+            return JsonResponse({
+                'error': 'Parámetros de URL faltantes. Se requiere equipo y estadística.',
+                'status': 'error'
+            }, status=400)
+        
+        equipo = get_object_or_404(Equipo, id=equipo_id)
+        
+        # Mapeo de estadísticas
+        STAT_MAPPING = {
+            'rating': 'fotmob_rating',
+            'goles': 'goals_per_match',
+            'goles-concedidos': 'goals_conceded_per_match',
+            'posesion': 'average_possession',
+            'vallas-invictas': 'clean_sheets',
+            'xg': 'expected_goals_xg',
+            'tiros-arco': 'shots_on_target_per_match',
+            'ocasiones-claras': 'big_chances',
+            'pases-precisos': 'accurate_passes_per_match',
+            'intercepciones': 'interceptions_per_match',
+            'entradas-exitosas': 'successful_tackles_per_match'
+        }
+        
+        field_name = STAT_MAPPING.get(estadistica.lower())
+        if not field_name:
+            return JsonResponse({
+                'error': f'Estadística "{estadistica}" no reconocida',
+                'status': 'error'
+            }, status=400)
+        
+        # Obtener estadísticas del equipo
+        estadisticas_obj = EstadisticasEquipo.objects.filter(equipo=equipo).first()
+        if not estadisticas_obj:
+            return JsonResponse({
+                'error': 'No hay estadísticas disponibles para este equipo',
+                'status': 'error'
+            }, status=404)
+        
+        valor_equipo = getattr(estadisticas_obj, field_name, None)
+        if valor_equipo is None:
+            return JsonResponse({
+                'error': f'No hay datos para la estadística "{estadistica}"',
+                'status': 'error'
+            }, status=404)
+        
+        # Obtener datos de todos los equipos para comparación
+        todos_equipos = EstadisticasEquipo.objects.select_related('equipo').exclude(**{f"{field_name}__isnull": True})
+        
+        equipos_data = []
+        valores_liga = []
+        
+        for eq_stat in todos_equipos:
+            valor = getattr(eq_stat, field_name, None)
+            if valor is not None:
+                try:
+                    valor_float = float(valor)
+                    valores_liga.append(valor_float)
+                    equipos_data.append({
+                        'nombre': eq_stat.equipo.nombre_corto or eq_stat.equipo.nombre[:15],
+                        'valor': valor_float,
+                        'es_actual': eq_stat.equipo.id == int(equipo_id)
+                    })
+                except (ValueError, TypeError):
+                    continue
+        
+        # Calcular estadísticas de la liga
+        if valores_liga:
+            promedio_liga = sum(valores_liga) / len(valores_liga)
+            valores_ordenados = sorted(valores_liga, reverse=True)
+            try:
+                posicion = valores_ordenados.index(float(valor_equipo)) + 1
+            except ValueError:
+                posicion = None
+        else:
+            promedio_liga = None
+            posicion = None
+        
+        return JsonResponse({
+            'estadistica': {
+                'nombre': estadistica,
+                'valor_equipo': float(valor_equipo),
+                'promedio_liga': round(promedio_liga, 2) if promedio_liga else None,
+                'posicion_liga': posicion,
+                'total_equipos': len(valores_liga)
+            },
+            'equipos_comparacion': equipos_data[:10],  # Top 10
+            'equipo': {
+                'id': equipo.id,
+                'nombre': equipo.nombre
+            },
+            'status': 'success'
+        })
+        
+    except Equipo.DoesNotExist:
+        return JsonResponse({
+            'error': 'Equipo no encontrado',
+            'status': 'error'
+        }, status=404)
+    except Exception as e:
+        print(f"❌ Error en ajax_equipo_estadistica_detalle: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+def ajax_grupos_stats_equipos(request):
+    """API para obtener grupos de estadísticas de equipos"""
+    try:
+        grupos = {
+            "ofensivo": {
+                "nombre": "Ofensivo",
+                "estadisticas": [
+                    {"key": "goals_per_match", "label": "Goles por partido"},
+                    {"key": "expected_goals_xg", "label": "Goles esperados (xG)"},
+                    {"key": "shots_on_target_per_match", "label": "Tiros al arco por partido"},
+                    {"key": "big_chances", "label": "Ocasiones claras"},
+                    {"key": "big_chances_missed", "label": "Ocasiones claras erradas"},
+                    {"key": "touches_in_opposition_box", "label": "Toques en área rival"},
+                    {"key": "penalties_awarded", "label": "Penales a favor"},
+                    {"key": "corners", "label": "Tiros de esquina"}
+                ]
+            },
+            "creacion": {
+                "nombre": "Creación",
+                "estadisticas": [
+                    {"key": "average_possession", "label": "Posesión promedio"},
+                    {"key": "accurate_passes_per_match", "label": "Pases precisos por partido"},
+                    {"key": "accurate_long_balls_per_match", "label": "Pases largos precisos por partido"},
+                    {"key": "accurate_crosses_per_match", "label": "Centros precisos por partido"}
+                ]
+            },
+            "defensivo": {
+                "nombre": "Defensivo", 
+                "estadisticas": [
+                    {"key": "goals_conceded_per_match", "label": "Goles concedidos por partido"},
+                    {"key": "xg_concedido", "label": "xG concedidos"},
+                    {"key": "clean_sheets", "label": "Vallas invictas"},
+                    {"key": "interceptions_per_match", "label": "Intercepciones por partido"},
+                    {"key": "successful_tackles_per_match", "label": "Entradas exitosas por partido"},
+                    {"key": "clearances_per_match", "label": "Despejes por partido"},
+                    {"key": "possession_won_final_3rd_per_match", "label": "Posesión ganada tercio final"},
+                    {"key": "saves_per_match", "label": "Atajadas por partido"}
+                ]
+            },
+            "general": {
+                "nombre": "General",
+                "estadisticas": [
+                    {"key": "fotmob_rating", "label": "Rating FotMob"},
+                    {"key": "fouls_per_match", "label": "Faltas por partido"},
+                    {"key": "yellow_cards", "label": "Tarjetas amarillas"},
+                    {"key": "red_cards", "label": "Tarjetas rojas"}
+                ]
+            }
+        }
+        return JsonResponse(grupos)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+def ajax_grupos_stats_jugadores(request):
+    """API para obtener grupos de estadísticas de jugadores"""
+    try:
+        grupos = {
+            "arquero": {
+                "nombre": "Arquero",
+                "estadisticas": [
+                    {"key": "saves", "label": "Atajadas"},
+                    {"key": "save_percentage", "label": "% de atajadas"},
+                    {"key": "goals_conceded", "label": "Goles concedidos"},
+                    {"key": "goals_prevented", "label": "Goles evitados"},
+                    {"key": "clean_sheets", "label": "Vallas invictas"},
+                    {"key": "error_led_to_goal", "label": "Errores que llevaron a gol"},
+                    {"key": "high_claim", "label": "Salidas altas"},
+                    {"key": "pass_accuracy", "label": "Precisión de pases"},
+                    {"key": "accurate_long_balls", "label": "Pases largos precisos"},
+                    {"key": "long_ball_accuracy", "label": "% precisión pases largos"}
+                ]
+            },
+            "ofensivo": {
+                "nombre": "Ofensivo",
+                "estadisticas": [
+                    {"key": "goals", "label": "Goles"},
+                    {"key": "expected_goals_xg", "label": "Goles esperados (xG)"},
+                    {"key": "xg_on_target_xgot", "label": "xG al arco"},
+                    {"key": "non_penalty_xg", "label": "xG sin penales"},
+                    {"key": "shots", "label": "Tiros"},
+                    {"key": "shots_on_target", "label": "Tiros al arco"},
+                    {"key": "touches_in_opposition_box", "label": "Toques en área rival"},
+                    {"key": "successful_dribbles", "label": "Regates exitosos"},
+                    {"key": "dribble_success", "label": "% éxito en regates"}
+                ]
+            },
+            "creacion": {
+                "nombre": "Creación",
+                "estadisticas": [
+                    {"key": "assists", "label": "Asistencias"},
+                    {"key": "expected_assists_xa", "label": "Asistencias esperadas (xA)"},
+                    {"key": "successful_passes", "label": "Pases exitosos"},
+                    {"key": "pass_accuracy_outfield", "label": "% precisión pases"},
+                    {"key": "accurate_long_balls_outfield", "label": "Pases largos precisos"},
+                    {"key": "long_ball_accuracy_outfield", "label": "% precisión pases largos"},
+                    {"key": "chances_created", "label": "Ocasiones creadas"},
+                    {"key": "successful_crosses", "label": "Centros exitosos"},
+                    {"key": "cross_accuracy", "label": "% precisión centros"},
+                    {"key": "touches", "label": "Toques"}
+                ]
+            },
+            "defensivo": {
+                "nombre": "Defensivo",
+                "estadisticas": [
+                    {"key": "tackles_won", "label": "Entradas ganadas"},
+                    {"key": "tackles_won_percentage", "label": "% entradas ganadas"},
+                    {"key": "duels_won", "label": "Duelos ganados"},
+                    {"key": "duels_won_percentage", "label": "% duelos ganados"},
+                    {"key": "aerial_duels_won", "label": "Duelos aéreos ganados"},
+                    {"key": "aerial_duels_won_percentage", "label": "% duelos aéreos ganados"},
+                    {"key": "interceptions", "label": "Intercepciones"},
+                    {"key": "blocked", "label": "Bloqueos"},
+                    {"key": "recoveries", "label": "Recuperaciones"},
+                    {"key": "possession_won_final_3rd", "label": "Posesión ganada tercio final"}
+                ]
+            },
+            "general": {
+                "nombre": "General",
+                "estadisticas": [
+                    {"key": "fouls_won", "label": "Faltas recibidas"},
+                    {"key": "fouls_committed", "label": "Faltas cometidas"},
+                    {"key": "penalties_awarded", "label": "Penales conseguidos"},
+                    {"key": "yellow_cards", "label": "Tarjetas amarillas"},
+                    {"key": "red_cards", "label": "Tarjetas rojas"},
+                    {"key": "dispossessed", "label": "Desposesiones"},
+                    {"key": "dribbled_past", "label": "Regateado"}
+                ]
+            }
+        }
+        return JsonResponse(grupos)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+def ajax_equipo_jugadores(request, equipo_id):
+    """API para obtener jugadores de un equipo específico"""
+    try:
+        equipo = get_object_or_404(Equipo, id=equipo_id)
+        jugadores = Jugador.objects.filter(equipo=equipo).order_by('nombre')
+        
+        jugadores_data = []
+        for jugador in jugadores:
+            jugadores_data.append({
+                'id': jugador.id,
+                'nombre': jugador.nombre,
+                'posicion': jugador.posicion or 'N/A',
+                'edad': jugador.edad,
+                'equipo': jugador.equipo.nombre if jugador.equipo else 'Sin equipo'
+            })
+        
+        return JsonResponse({
+            'jugadores': jugadores_data,
+            'total': len(jugadores_data),
+            'equipo': {
+                'id': equipo.id,
+                'nombre': equipo.nombre
+            },
+            'status': 'success'
+        })
+        
+    except Equipo.DoesNotExist:
+        return JsonResponse({
+            'error': 'Equipo no encontrado',
+            'status': 'error'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)
+
+@csrf_exempt
+def ajax_comparar_equipos(request):
+    """API para comparar dos equipos con estadísticas reales"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        equipo1_id = data.get('equipo1_id')
+        equipo2_id = data.get('equipo2_id')
+        grupo = data.get('grupo')
+        
+        # Obtener equipos
+        equipo1 = get_object_or_404(Equipo, id=equipo1_id)
+        equipo2 = get_object_or_404(Equipo, id=equipo2_id)
+        
+        # Obtener estadísticas
+        stats1 = EstadisticasEquipo.objects.filter(equipo=equipo1).first()
+        stats2 = EstadisticasEquipo.objects.filter(equipo=equipo2).first()
+        
+        if not stats1 or not stats2:
+            return JsonResponse({
+                'error': 'No hay estadísticas disponibles para uno o ambos equipos',
+                'status': 'error'
+            }, status=404)
+        
+        # ✅ MAPEO ACTUALIZADO CON LOS GRUPOS CORRECTOS
+        grupos_mapping = {
+            "ofensivo": ["goals_per_match", "expected_goals_xg", "shots_on_target_per_match", "big_chances", "touches_in_opposition_box"],
+            "creacion": ["accurate_passes_per_match", "accurate_long_balls_per_match", "accurate_crosses_per_match", "average_possession"],
+            "defensivo": ["goals_conceded_per_match", "clean_sheets", "interceptions_per_match", "successful_tackles_per_match", "saves_per_match"],
+            "general": ["fotmob_rating", "fouls_per_match", "yellow_cards", "red_cards"]
+        }
+        
+        estadisticas_grupo = grupos_mapping.get(grupo, [])
+        if not estadisticas_grupo:
+            return JsonResponse({
+                'error': f'Grupo "{grupo}" no reconocido',
+                'status': 'error'
+            }, status=400)
+        
+        # Construir respuesta
+        estadisticas = []
+        valores_equipo1 = []
+        valores_equipo2 = []
+        
+        for stat_key in estadisticas_grupo:
+            valor1 = getattr(stats1, stat_key, 0) or 0
+            valor2 = getattr(stats2, stat_key, 0) or 0
+            
+            # Manejar valores de texto como average_possession
+            if isinstance(valor1, str):
+                try:
+                    valor1 = float(valor1.replace('%', ''))
+                except:
+                    valor1 = 0
+            if isinstance(valor2, str):
+                try:
+                    valor2 = float(valor2.replace('%', ''))
+                except:
+                    valor2 = 0
+            
+            estadisticas.append({
+                'nombre': stat_key.replace('_', ' ').replace('per match', '').title(),
+                'max_valor': max(float(valor1), float(valor2), 10)
+            })
+            
+            valores_equipo1.append(float(valor1))
+            valores_equipo2.append(float(valor2))
+        
+        return JsonResponse({
+            'equipo1': {
+                'id': equipo1.id,
+                'nombre': equipo1.nombre,
+                'liga': equipo1.liga
+            },
+            'equipo2': {
+                'id': equipo2.id,
+                'nombre': equipo2.nombre,
+                'liga': equipo2.liga
+            },
+            'estadisticas': estadisticas,
+            'valores_equipo1': valores_equipo1,
+            'valores_equipo2': valores_equipo2,
+            'grupo': grupo,
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        print(f"Error en ajax_comparar_equipos: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+@csrf_exempt
+def ajax_comparar_jugadores(request):
+    """API para comparar dos jugadores con estadísticas reales"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        jugador1_id = data.get('jugador1_id')
+        jugador2_id = data.get('jugador2_id')
+        grupo = data.get('grupo')
+        
+        if not jugador1_id or not jugador2_id or not grupo:
+            return JsonResponse({
+                'error': 'Faltan parámetros requeridos: jugador1_id, jugador2_id, grupo',
+                'status': 'error'
+            }, status=400)
+        
+        # Obtener jugadores
+        jugador1 = get_object_or_404(Jugador, id=jugador1_id)
+        jugador2 = get_object_or_404(Jugador, id=jugador2_id)
+        
+        # Obtener estadísticas
+        from .models import EstadisticasJugador
+        stats1 = EstadisticasJugador.objects.filter(jugador=jugador1).first()
+        stats2 = EstadisticasJugador.objects.filter(jugador=jugador2).first()
+        
+        if not stats1 or not stats2:
+            return JsonResponse({
+                'error': 'No hay estadísticas disponibles para uno o ambos jugadores',
+                'status': 'error'
+            }, status=404)
+        
+        # ✅ MAPEO COMPLETO CON LOS 5 GRUPOS
+        grupos_mapping = {
+            "arquero": [
+                "saves", "save_percentage", "goals_conceded", "goals_prevented", 
+                "clean_sheets", "error_led_to_goal", "high_claim", "pass_accuracy"
+            ],
+            "ofensivo": [
+                "goals", "expected_goals_xg", "shots", "shots_on_target", 
+                "touches_in_opposition_box", "successful_dribbles", "dribble_success"
+            ],
+            "creacion": [
+                "assists", "expected_assists_xa", "successful_passes", "pass_accuracy_outfield", 
+                "chances_created", "successful_crosses", "cross_accuracy", "touches"
+            ],
+            "defensivo": [
+                "tackles_won", "tackles_won_percentage", "duels_won", "duels_won_percentage",
+                "aerial_duels_won", "interceptions", "blocked", "recoveries"
+            ],
+            "general": [
+                "fouls_won", "fouls_committed", "yellow_cards", "red_cards", 
+                "dispossessed", "dribbled_past"
+            ]
+        }
+        
+        estadisticas_grupo = grupos_mapping.get(grupo, [])
+        if not estadisticas_grupo:
+            return JsonResponse({
+                'error': f'Grupo "{grupo}" no reconocido. Grupos disponibles: {list(grupos_mapping.keys())}',
+                'status': 'error'
+            }, status=400)
+        
+        # Construir respuesta con estadísticas reales
+        estadisticas = []
+        valores_jugador1 = []
+        valores_jugador2 = []
+        
+        # Diccionario de traducciones para nombres más legibles
+        traducciones = {
+            'saves': 'Atajadas',
+            'save_percentage': '% Atajadas',
+            'goals_conceded': 'Goles Concedidos',
+            'goals_prevented': 'Goles Evitados',
+            'clean_sheets': 'Vallas Invictas',
+            'pass_accuracy': '% Pases Precisos',
+            'goals': 'Goles',
+            'expected_goals_xg': 'xG',
+            'shots': 'Tiros',
+            'shots_on_target': 'Tiros al Arco',
+            'touches_in_opposition_box': 'Toques Área Rival',
+            'successful_dribbles': 'Regates Exitosos',
+            'dribble_success': '% Regates',
+            'assists': 'Asistencias',
+            'expected_assists_xa': 'xA',
+            'successful_passes': 'Pases Exitosos',
+            'pass_accuracy_outfield': '% Pases Campo',
+            'chances_created': 'Ocasiones Creadas',
+            'successful_crosses': 'Centros Exitosos',
+            'cross_accuracy': '% Centros',
+            'touches': 'Toques',
+            'tackles_won': 'Entradas Ganadas',
+            'tackles_won_percentage': '% Entradas',
+            'duels_won': 'Duelos Ganados',
+            'duels_won_percentage': '% Duelos',
+            'aerial_duels_won': 'Duelos Aéreos',
+            'interceptions': 'Intercepciones',
+            'blocked': 'Bloqueos',
+            'recoveries': 'Recuperaciones',
+            'fouls_won': 'Faltas Recibidas',
+            'fouls_committed': 'Faltas Cometidas',
+            'yellow_cards': 'Tarjetas Amarillas',
+            'red_cards': 'Tarjetas Rojas',
+            'dispossessed': 'Desposesiones',
+            'dribbled_past': 'Regateado'
+        }
+        
+        for stat_key in estadisticas_grupo:
+            valor1 = getattr(stats1, stat_key, 0) or 0
+            valor2 = getattr(stats2, stat_key, 0) or 0
+            
+            # Convertir a float y manejar valores nulos
+            try:
+                valor1 = float(valor1)
+            except (ValueError, TypeError):
+                valor1 = 0.0
+                
+            try:
+                valor2 = float(valor2)
+            except (ValueError, TypeError):
+                valor2 = 0.0
+            
+            # Usar traducción si existe, sino formatear el nombre
+            nombre_stat = traducciones.get(stat_key, stat_key.replace('_', ' ').title())
+            
+            estadisticas.append({
+                'nombre': nombre_stat,
+                'max_valor': max(valor1, valor2, 10)  # Valor máximo para escala del gráfico
+            })
+            
+            valores_jugador1.append(valor1)
+            valores_jugador2.append(valor2)
+        
+        return JsonResponse({
+            'jugador1': {
+                'id': jugador1.id,
+                'nombre': jugador1.nombre,
+                'equipo': jugador1.equipo.nombre if jugador1.equipo else 'Sin equipo',
+                'posicion': jugador1.posicion or 'N/A',
+                'edad': jugador1.edad,
+                'pais': jugador1.pais
+            },
+            'jugador2': {
+                'id': jugador2.id,
+                'nombre': jugador2.nombre,
+                'equipo': jugador2.equipo.nombre if jugador2.equipo else 'Sin equipo',
+                'posicion': jugador2.posicion or 'N/A',
+                'edad': jugador2.edad,
+                'pais': jugador2.pais
+            },
+            'estadisticas': estadisticas,
+            'valores_jugador1': valores_jugador1,
+            'valores_jugador2': valores_jugador2,
+            'grupo': grupo,
+            'total_estadisticas': len(estadisticas),
+            'status': 'success'
+        })
+        
+    except Jugador.DoesNotExist:
+        return JsonResponse({
+            'error': 'Uno o ambos jugadores no encontrados',
+            'status': 'error'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'JSON inválido en el cuerpo de la petición',
+            'status': 'error'
+        }, status=400)
+    except Exception as e:
+        print(f"❌ Error en ajax_comparar_jugadores: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'error': f'Error interno del servidor: {str(e)}',
+            'status': 'error'
+        }, status=500)
+
+@csrf_exempt
+def ajax_comparar_equipos_completo(request):
+    """API para obtener TODAS las estadísticas de dos equipos de una vez"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        equipo1_id = data.get('equipo1_id')
+        equipo2_id = data.get('equipo2_id')
+        
+        if not equipo1_id or not equipo2_id:
+            return JsonResponse({
+                'error': 'IDs de equipos requeridos',
+                'status': 'error'
+            }, status=400)
+        
+        # Obtener equipos
+        try:
+            equipo1 = Equipo.objects.get(id=equipo1_id)
+            equipo2 = Equipo.objects.get(id=equipo2_id)
+        except Equipo.DoesNotExist:
+            return JsonResponse({
+                'error': 'Uno o ambos equipos no encontrados',
+                'status': 'error'
+            }, status=404)
+        
+        # Obtener estadísticas
+        try:
+            stats1 = EstadisticasEquipo.objects.filter(equipo=equipo1).first()
+            stats2 = EstadisticasEquipo.objects.filter(equipo=equipo2).first()
+        except Exception as e:
+            return JsonResponse({
+                'error': f'Error obteniendo estadísticas: {str(e)}',
+                'status': 'error'
+            }, status=500)
+        
+        if not stats1 or not stats2:
+            return JsonResponse({
+                'error': 'No hay estadísticas disponibles para uno o ambos equipos',
+                'status': 'error'
+            }, status=404)
+        
+        # ✅ TODOS LOS GRUPOS DE ESTADÍSTICAS
+        grupos_mapping = {
+            "ofensivo": {
+                "nombre": "Estadísticas Ofensivas",
+                "icono": "bx-target-lock",
+                "stats": ["goals_per_match", "expected_goals_xg", "shots_on_target_per_match", "big_chances", "touches_in_opposition_box"]
+            },
+            "creacion": {
+                "nombre": "Creación de Juego", 
+                "icono": "bx-network-chart",
+                "stats": ["accurate_passes_per_match", "accurate_long_balls_per_match", "accurate_crosses_per_match", "average_possession"]
+            },
+            "defensivo": {
+                "nombre": "Estadísticas Defensivas",
+                "icono": "bx-shield-alt-2", 
+                "stats": ["goals_conceded_per_match", "clean_sheets", "interceptions_per_match", "successful_tackles_per_match", "saves_per_match"]
+            },
+            "general": {
+                "nombre": "Estadísticas Generales",
+                "icono": "bx-stats",
+                "stats": ["fotmob_rating", "fouls_per_match", "yellow_cards", "red_cards"]
+            }
+        }
+        
+        # ✅ MAPEO DE NOMBRES LEGIBLES
+        nombres_stats = {
+            "goals_per_match": "Goles por Partido",
+            "expected_goals_xg": "xG (Goles Esperados)",
+            "shots_on_target_per_match": "Tiros al Arco p/P",
+            "big_chances": "Grandes Oportunidades",
+            "touches_in_opposition_box": "Toques en Área Rival",
+            "accurate_passes_per_match": "Pases Precisos p/P",
+            "accurate_long_balls_per_match": "Pases Largos Precisos p/P", 
+            "accurate_crosses_per_match": "Centros Precisos p/P",
+            "average_possession": "Posesión Promedio (%)",
+            "goals_conceded_per_match": "Goles Recibidos p/P",
+            "clean_sheets": "Portería a Cero",
+            "interceptions_per_match": "Intercepciones p/P",
+            "successful_tackles_per_match": "Tackles Exitosos p/P",
+            "saves_per_match": "Atajadas p/P",
+            "fotmob_rating": "Rating FotMob",
+            "fouls_per_match": "Faltas p/P",
+            "yellow_cards": "Tarjetas Amarillas", 
+            "red_cards": "Tarjetas Rojas"
+        }
+        
+        # ✅ FUNCIÓN SEGURA PARA OBTENER LIGA
+        def get_liga_nombre(equipo):
+            try:
+                if hasattr(equipo, 'liga') and equipo.liga:
+                    # Si liga es un objeto, obtener su nombre
+                    if hasattr(equipo.liga, 'nombre'):
+                        return equipo.liga.nombre
+                    # Si liga es un string directamente
+                    else:
+                        return str(equipo.liga)
+                else:
+                    return 'Liga N/A'
+            except Exception as e:
+                print(f"⚠️ Error obteniendo liga de {equipo.nombre}: {str(e)}")
+                return 'Liga N/A'
+        
+        # ✅ PROCESAR TODOS LOS GRUPOS
+        resultado = {
+            'equipo1': {
+                'nombre': str(equipo1.nombre) if hasattr(equipo1, 'nombre') else 'Equipo 1',
+                'liga': get_liga_nombre(equipo1)
+            },
+            'equipo2': {
+                'nombre': str(equipo2.nombre) if hasattr(equipo2, 'nombre') else 'Equipo 2',
+                'liga': get_liga_nombre(equipo2)
+            },
+            'grupos': {}
+        }
+        
+        for grupo_key, grupo_info in grupos_mapping.items():
+            estadisticas_grupo = []
+            valores_equipo1 = []
+            valores_equipo2 = []
+            
+            for stat_field in grupo_info["stats"]:
+                try:
+                    # Obtener valores de forma segura
+                    valor1 = getattr(stats1, stat_field, 0)
+                    valor2 = getattr(stats2, stat_field, 0)
+                    
+                    # Convertir a float de forma segura
+                    valor1 = float(valor1) if valor1 is not None else 0.0
+                    valor2 = float(valor2) if valor2 is not None else 0.0
+                    
+                    estadisticas_grupo.append({
+                        'nombre': nombres_stats.get(stat_field, stat_field.replace('_', ' ').title()),
+                        'campo': stat_field
+                    })
+                    valores_equipo1.append(valor1)
+                    valores_equipo2.append(valor2)
+                    
+                except Exception as e:
+                    print(f"⚠️ Error procesando {stat_field}: {str(e)}")
+                    # Continuar con valores por defecto
+                    estadisticas_grupo.append({
+                        'nombre': nombres_stats.get(stat_field, stat_field.replace('_', ' ').title()),
+                        'campo': stat_field
+                    })
+                    valores_equipo1.append(0.0)
+                    valores_equipo2.append(0.0)
+            
+            resultado['grupos'][grupo_key] = {
+                'nombre': grupo_info["nombre"],
+                'icono': grupo_info["icono"],
+                'estadisticas': estadisticas_grupo,
+                'valores_equipo1': valores_equipo1,
+                'valores_equipo2': valores_equipo2
+            }
+        
+        return JsonResponse(resultado)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'Datos JSON inválidos',
+            'status': 'error'
+        }, status=400)
+    except Exception as e:
+        print(f"❌ Error en ajax_comparar_equipos_completo: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'error': f'Error interno del servidor: {str(e)}',
+            'status': 'error'
+        }, status=500)
+
+@csrf_exempt
+def ajax_comparar_jugadores_completo(request):
+    """API para obtener TODAS las estadísticas de dos jugadores de una vez"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido'}, status=405)
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        jugador1_id = data.get('jugador1_id')
+        jugador2_id = data.get('jugador2_id')
+        
+        if not jugador1_id or not jugador2_id:
+            return JsonResponse({
+                'error': 'IDs de jugadores requeridos',
+                'status': 'error'
+            }, status=400)
+        
+        # Obtener jugadores
+        try:
+            jugador1 = Jugador.objects.get(id=jugador1_id)
+            jugador2 = Jugador.objects.get(id=jugador2_id)
+        except Jugador.DoesNotExist:
+            return JsonResponse({
+                'error': 'Uno o ambos jugadores no encontrados',
+                'status': 'error'
+            }, status=404)
+        
+        # Obtener estadísticas
+        try:
+            stats1 = EstadisticasJugador.objects.filter(jugador=jugador1).first()
+            stats2 = EstadisticasJugador.objects.filter(jugador=jugador2).first()
+        except Exception as e:
+            return JsonResponse({
+                'error': f'Error obteniendo estadísticas: {str(e)}',
+                'status': 'error'
+            }, status=500)
+        
+        if not stats1 or not stats2:
+            return JsonResponse({
+                'error': 'No hay estadísticas disponibles para uno o ambos jugadores',
+                'status': 'error'
+            }, status=404)
+        
+        # ✅ GRUPOS BÁSICOS PARA EMPEZAR
+        grupos_mapping = {
+            "general": {
+                "nombre": "Estadísticas Generales",
+                "icono": "bx-stats",
+                "stats": ["goals", "assists", "yellow_cards", "red_cards", "minutes_played"]
+            },
+            "ofensivo": {
+                "nombre": "Estadísticas Ofensivas", 
+                "icono": "bx-target-lock",
+                "stats": ["goals", "assists", "shots_on_target", "big_chances_scored", "penalty_goals"]
+            }
+        }
+        
+        # ✅ MAPEO DE NOMBRES LEGIBLES BÁSICO
+        nombres_stats = {
+            "goals": "Goles",
+            "assists": "Asistencias",
+            "yellow_cards": "Tarjetas Amarillas",
+            "red_cards": "Tarjetas Rojas", 
+            "minutes_played": "Minutos Jugados",
+            "shots_on_target": "Tiros al Arco",
+            "big_chances_scored": "Grandes Oportunidades Anotadas",
+            "penalty_goals": "Goles de Penal"
+        }
+        
+        # ✅ FUNCIÓN SEGURA PARA OBTENER EQUIPO
+        def get_equipo_nombre(jugador):
+            try:
+                if hasattr(jugador, 'equipo') and jugador.equipo:
+                    if hasattr(jugador.equipo, 'nombre'):
+                        return jugador.equipo.nombre
+                    else:
+                        return str(jugador.equipo)
+                else:
+                    return 'Sin Equipo'
+            except Exception as e:
+                print(f"⚠️ Error obteniendo equipo de {jugador.nombre}: {str(e)}")
+                return 'Sin Equipo'
+        
+        # ✅ PROCESAR TODOS LOS GRUPOS
+        resultado = {
+            'jugador1': {
+                'nombre': str(jugador1.nombre) if hasattr(jugador1, 'nombre') else 'Jugador 1',
+                'equipo': get_equipo_nombre(jugador1),
+                'posicion': str(jugador1.posicion) if hasattr(jugador1, 'posicion') and jugador1.posicion else 'N/A',
+                'edad': int(jugador1.edad) if hasattr(jugador1, 'edad') and jugador1.edad else 0,
+                'pais': str(jugador1.pais) if hasattr(jugador1, 'pais') and jugador1.pais else 'N/A'
+            },
+            'jugador2': {
+                'nombre': str(jugador2.nombre) if hasattr(jugador2, 'nombre') else 'Jugador 2',
+                'equipo': get_equipo_nombre(jugador2),
+                'posicion': str(jugador2.posicion) if hasattr(jugador2, 'posicion') and jugador2.posicion else 'N/A',
+                'edad': int(jugador2.edad) if hasattr(jugador2, 'edad') and jugador2.edad else 0,
+                'pais': str(jugador2.pais) if hasattr(jugador2, 'pais') and jugador2.pais else 'N/A'
+            },
+            'grupos': {}
+        }
+        
+        for grupo_key, grupo_info in grupos_mapping.items():
+            estadisticas_grupo = []
+            valores_jugador1 = []
+            valores_jugador2 = []
+            
+            for stat_field in grupo_info["stats"]:
+                try:
+                    # Obtener valores de forma segura
+                    valor1 = getattr(stats1, stat_field, 0)
+                    valor2 = getattr(stats2, stat_field, 0)
+                    
+                    # Convertir a float de forma segura
+                    valor1 = float(valor1) if valor1 is not None else 0.0
+                    valor2 = float(valor2) if valor2 is not None else 0.0
+                    
+                    estadisticas_grupo.append({
+                        'nombre': nombres_stats.get(stat_field, stat_field.replace('_', ' ').title()),
+                        'campo': stat_field
+                    })
+                    valores_jugador1.append(valor1)
+                    valores_jugador2.append(valor2)
+                    
+                except Exception as e:
+                    print(f"⚠️ Error procesando {stat_field}: {str(e)}")
+                    # Continuar con valores por defecto
+                    estadisticas_grupo.append({
+                        'nombre': nombres_stats.get(stat_field, stat_field.replace('_', ' ').title()),
+                        'campo': stat_field
+                    })
+                    valores_jugador1.append(0.0)
+                    valores_jugador2.append(0.0)
+            
+            resultado['grupos'][grupo_key] = {
+                'nombre': grupo_info["nombre"],
+                'icono': grupo_info["icono"],
+                'estadisticas': estadisticas_grupo,
+                'valores_jugador1': valores_jugador1,
+                'valores_jugador2': valores_jugador2
+            }
+        
+        return JsonResponse(resultado)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'Datos JSON inválidos',
+            'status': 'error'
+        }, status=400)
+    except Exception as e:
+        print(f"❌ Error en ajax_comparar_jugadores_completo: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'error': f'Error interno del servidor: {str(e)}',
+            'status': 'error'
+        }, status=500)

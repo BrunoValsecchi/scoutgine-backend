@@ -1,17 +1,41 @@
 import logging
 from django.shortcuts import render
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from .models import Posicion, Torneo, Equipo
 
 logger = logging.getLogger(__name__)
 
+@csrf_exempt
+@require_http_methods(["GET"])
 def ligas(request):
+    print("🔥 VISTA LIGAS LLAMADA")  # ← DEBUG
     logger.debug('Vista ligas llamada')
+    
     try:
-        # Agrupar por nombre y zona (todas las temporadas juntas)
-        torneos = Torneo.objects.all().order_by('nombre', 'zona')
+        # ✅ VERIFICAR QUE HAY DATOS
+        total_torneos = Torneo.objects.count()
+        total_posiciones = Posicion.objects.count()
+        total_equipos = Equipo.objects.count()
+        
+        print(f"📊 DB Info: {total_torneos} torneos, {total_posiciones} posiciones, {total_equipos} equipos")
+        
+        if total_torneos == 0:
+            return JsonResponse({
+                'torneos': {},
+                'message': 'No hay torneos en la base de datos',
+                'total_torneos': 0,
+                'status': 'success'
+            })
+        
+        # Agrupar por nombre y zona
+        torneos = Torneo.objects.all().order_by('nombre', 'zona')[:10]  # ← LIMITAR PARA DEBUG
         zonas_dict = {}
+        
         for torneo in torneos:
+            print(f"🏆 Procesando torneo: {torneo.nombre} - Zona: {torneo.zona}")
+            
             key = f"{torneo.nombre} - {torneo.zona}" if torneo.zona else torneo.nombre
             if key not in zonas_dict:
                 zonas_dict[key] = {
@@ -19,54 +43,52 @@ def ligas(request):
                     'zona': torneo.zona,
                     'posiciones': []
                 }
-            posiciones = Posicion.objects.filter(torneo=torneo).select_related('equipo').order_by('posicion')
+            
+            posiciones = Posicion.objects.filter(torneo=torneo).select_related('equipo').order_by('posicion')[:20]  # ← LIMITAR
             for pos in posiciones:
                 equipo_nombre = pos.equipo.nombre if pos.equipo else 'Sin equipo'
                 zonas_dict[key]['posiciones'].append({
                     'posicion': pos.posicion,
                     'equipo': equipo_nombre,
-                    'pj': pos.partidos_jugados,
-                    'pg': pos.partidos_ganados,
-                    'pe': pos.partidos_empatados,
-                    'pp': pos.partidos_perdidos,
-                    'gf': pos.goles_a_favor,
-                    'gc': pos.goles_en_contra,
-                    'dif': pos.goles_a_favor - pos.goles_en_contra,
-                    'pts': (pos.partidos_ganados * 3) + pos.partidos_empatados
+                    'pj': pos.partidos_jugados or 0,
+                    'pg': pos.partidos_ganados or 0,
+                    'pe': pos.partidos_empatados or 0,
+                    'pp': pos.partidos_perdidos or 0,
+                    'gf': pos.goles_a_favor or 0,
+                    'gc': pos.goles_en_contra or 0,
                 })
-        # Quitar duplicados de equipos por zona (por si un equipo aparece en varias temporadas)
-        for zona in zonas_dict.values():
-            equipos_vistos = set()
-            posiciones_unicas = []
-            for pos in zona['posiciones']:
-                if pos['equipo'] not in equipos_vistos:
-                    posiciones_unicas.append(pos)
-                    equipos_vistos.add(pos['equipo'])
-            zona['posiciones'] = sorted(posiciones_unicas, key=lambda x: x['posicion'])
         
-        # ✅ AGREGAR DATOS DE STATS EQUIPOS
-        from .statsequipo import obtener_stats_resumen  # Crear esta función
+        print(f"✅ Procesados {len(zonas_dict)} grupos de torneos")
         
-        try:
-            top3_por_estadistica = obtener_stats_resumen()
-            print(f"🏆 Datos stats agregados a ligas: {len(top3_por_estadistica)} estadísticas")
-        except Exception as e:
-            print(f"❌ Error al obtener stats: {e}")
-            top3_por_estadistica = {}
-        
-        context = {
+        # ✅ RESPUESTA SIMPLE PARA DEBUG
+        response_data = {
             'torneos': zonas_dict,
-            'stats_equipos_data': top3_por_estadistica,  # ← CAMBIO AQUÍ
+            'total_torneos': len(zonas_dict),
+            'db_stats': {
+                'torneos': total_torneos,
+                'posiciones': total_posiciones,
+                'equipos': total_equipos
+            },
+            'status': 'success'
         }
-        return render(request, "ligas.html", context)
+        
+        print("🚀 Enviando respuesta JSON")
+        return JsonResponse(response_data)
+        
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        context = {
+        error_detail = traceback.format_exc()
+        print(f"❌ ERROR EN LIGAS: {e}")
+        print(f"📝 Traceback: {error_detail}")
+        
+        logger.error(f'Error en vista ligas: {e}')
+        
+        return JsonResponse({
             'torneos': {},
-            'error': f'Error: {str(e)}'
-        }
-        return render(request, "ligas.html", context)
+            'error': str(e),
+            'traceback': error_detail if settings.DEBUG else None,
+            'status': 'error'
+        }, status=500)
 
 def ligas_api(request):
     try:

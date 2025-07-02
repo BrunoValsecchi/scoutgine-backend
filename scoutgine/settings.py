@@ -32,19 +32,20 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'rest_framework',
-    'corsheaders',
+    'django_extensions',
+    'corsheaders',  # ← AGREGAR ESTO
     'myapp',
+    'rest_framework',
 ]
 
 # MIDDLEWARE - AGREGAR WHITENOISE
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # ✅ PRIMERO
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # ← AGREGAR ESTA LÍNEA
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',  # ✅ DESPUÉS DE CORS
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -52,21 +53,12 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'scoutgine.urls'
 
-# STATIC FILES - CONFIGURACIÓN WHITENOISE
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # WhiteNoise servirá desde aquí
-
-# AGREGAR FRONTEND
-STATICFILES_DIRS = [
-    BASE_DIR.parent / 'frontend' / 'app' / 'static',  # ← RUTA A TU FRONTEND
-]
-
-# TEMPLATES - AGREGAR FRONTEND
+# Templates
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-            os.path.join(BASE_DIR, '..', 'frontend', 'app', 'templates'),
+            BASE_DIR.parent / 'frontend' / 'app',  # ✅ Templates desde frontend
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -79,6 +71,13 @@ TEMPLATES = [
         },
     },
 ]
+
+# Static files
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [
+    BASE_DIR.parent / 'frontend' / 'app' / 'static',  # ✅ Static files desde frontend
+]
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # WhiteNoise servirá desde aquí
 
 WSGI_APPLICATION = 'scoutgine.wsgi.application'
 
@@ -140,20 +139,12 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20
 }
 
-# CORS CONFIGURATION - ACTUALIZAR CON TU FRONTEND
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://scoutgine-frontend.vercel.app",  # Si usas Vercel
-    "https://scoutgine-frontend.netlify.app", # Si usas Netlify
-    "https://scoutgine-frontend.onrender.com", # Si usas Render
-]
+# CORS CONFIGURATION
+CORS_ALLOW_ALL_ORIGINS = True  # Para desarrollo
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False
 
-# Headers permitidos
-CORS_ALLOWED_HEADERS = [
+CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
     'authorization',
@@ -161,8 +152,15 @@ CORS_ALLOWED_HEADERS = [
     'dnt',
     'origin',
     'user-agent',
-    'x-csrftoken',
+    'x-csrftoken',        # ✅ IMPORTANTE
     'x-requested-with',
+    'csrf-token',         # ✅ AGREGAR ESTE
+]
+
+# ✅ DESACTIVAR CSRF TEMPORALMENTE SOLO PARA ESTAS RUTAS
+CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1:8080",
+    "http://localhost:8080",
 ]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
