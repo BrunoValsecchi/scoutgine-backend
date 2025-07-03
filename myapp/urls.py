@@ -54,13 +54,15 @@ urlpatterns = [
     path('ajax/equipo/<int:equipo_id>/estadistica/<str:estadistica>/', views.ajax_equipo_estadistica_detalle, name='ajax_equipo_estadistica_detalle'),
     path('grafico-equipo/<int:equipo_id>/<str:stat_name>/', views.grafico_equipo, name='grafico_equipo_stat'),
 
-    # ✅ NUEVAS RUTAS PARA COMPARACIÓN
-    path('ajax/grupos-stats-equipos/', views.ajax_grupos_stats_equipos, name='ajax_grupos_stats_equipos'),  # ✅ NUEVA
-    path('ajax/grupos-stats-jugadores/', views.ajax_grupos_stats_jugadores, name='ajax_grupos_stats_jugadores'),  # ✅ NUEVA
+    # ✅ RUTAS PARA COMPARACIÓN
     path('ajax/comparar-equipos/', views.ajax_comparar_equipos, name='ajax_comparar_equipos'),
     path('ajax/comparar-jugadores/', views.ajax_comparar_jugadores, name='ajax_comparar_jugadores'),
     
-    # ✅ NUEVAS RUTAS PARA ESTADÍSTICAS COMPLETAS
+    # ✅ RUTAS PARA COMPARACIÓN COMPLETA (ESTADÍSTICAS)
     path('ajax/comparar-equipos-completo/', views.ajax_comparar_equipos_completo, name='ajax_comparar_equipos_completo'),
     path('ajax/comparar-jugadores-completo/', views.ajax_comparar_jugadores_completo, name='ajax_comparar_jugadores_completo'),
+    
+    # ✅ RUTAS PARA GRUPOS DE ESTADÍSTICAS
+    path('ajax/grupos-stats-equipos/', views.ajax_grupos_stats_equipos, name='ajax_grupos_stats_equipos'),
+    path('ajax/grupos-stats-jugadores/', views.ajax_grupos_stats_jugadores, name='ajax_grupos_stats_jugadores'),
 ]

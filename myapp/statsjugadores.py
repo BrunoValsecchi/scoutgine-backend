@@ -276,3 +276,91 @@ def stats_jugadores(request):
         'message': 'Stats jugadores - Vista básica',
         'status': 'success'
     })
+
+def obtener_grupos_stats_jugadores():
+    """Devuelve TODOS los grupos de estadísticas de jugadores (47 estadísticas)"""
+    return {
+        "arquero": {
+            "nombre": "Arquero",
+            "icono": "bx-shield-quarter",
+            "estadisticas": [
+                {"key": "saves", "nombre": "Atajadas"},
+                {"key": "save_percentage", "nombre": "% Atajadas"},
+                {"key": "goals_conceded", "nombre": "Goles Concedidos"},
+                {"key": "goals_prevented", "nombre": "Goles Prevenidos"},
+                {"key": "clean_sheets", "nombre": "Vallas Invictas"},
+                {"key": "error_led_to_goal", "nombre": "Errores que llevaron a gol"},
+                {"key": "high_claim", "nombre": "Salidas en alto"},
+                {"key": "pass_accuracy", "nombre": "Precisión de pases"},
+                {"key": "accurate_long_balls", "nombre": "Pases largos precisos"},
+                {"key": "long_ball_accuracy", "nombre": "% Pases largos"}
+            ]
+        },
+        "ofensivo": {
+            "nombre": "Ofensivo",
+            "icono": "bx-football",
+            "estadisticas": [
+                {"key": "goals", "nombre": "Goles"},
+                {"key": "expected_goals_xg", "nombre": "xG"},
+                {"key": "xg_on_target_xgot", "nombre": "xG en el arco"},
+                {"key": "non_penalty_xg", "nombre": "xG sin penales"},
+                {"key": "shots", "nombre": "Tiros"},
+                {"key": "shots_on_target", "nombre": "Tiros al Arco"},
+                {"key": "assists", "nombre": "Asistencias"},
+                {"key": "expected_assists_xa", "nombre": "xA"},
+                {"key": "touches_in_opposition_box", "nombre": "Toques área rival"},
+                {"key": "penalties_awarded", "nombre": "Penales provocados"}
+            ]
+        },
+        "creacion": {
+            "nombre": "Creación y Pases",
+            "icono": "bx-transfer",
+            "estadisticas": [
+                {"key": "successful_passes", "nombre": "Pases Exitosos"},
+                {"key": "pass_accuracy_outfield", "nombre": "Precisión de pases"},
+                {"key": "accurate_long_balls_outfield", "nombre": "Pases largos precisos"},
+                {"key": "long_ball_accuracy_outfield", "nombre": "% Pases largos"},
+                {"key": "chances_created", "nombre": "Ocasiones Creadas"},
+                {"key": "successful_crosses", "nombre": "Centros exitosos"},
+                {"key": "cross_accuracy", "nombre": "% Centros"},
+                {"key": "touches", "nombre": "Toques"},
+                {"key": "assists", "nombre": "Asistencias"}
+            ]
+        },
+        "regates": {
+            "nombre": "Regates y Habilidad",
+            "icono": "bx-run",
+            "estadisticas": [
+                {"key": "successful_dribbles", "nombre": "Regates exitosos"},
+                {"key": "dribble_success", "nombre": "% Regates"},
+                {"key": "dispossessed", "nombre": "Pérdidas de balón"},
+                {"key": "fouls_won", "nombre": "Faltas Recibidas"}
+            ]
+        },
+        "defensivo": {
+            "nombre": "Defensivo",
+            "icono": "bx-shield",
+            "estadisticas": [
+                {"key": "tackles_won", "nombre": "Entradas Ganadas"},
+                {"key": "tackles_won_percentage", "nombre": "% Entradas"},
+                {"key": "duels_won", "nombre": "Duelos Ganados"},
+                {"key": "duels_won_percentage", "nombre": "% Duelos"},
+                {"key": "aerial_duels_won", "nombre": "Duelos aéreos ganados"},
+                {"key": "aerial_duels_won_percentage", "nombre": "% Duelos aéreos"},
+                {"key": "interceptions", "nombre": "Intercepciones"},
+                {"key": "blocked", "nombre": "Bloqueos"},
+                {"key": "recoveries", "nombre": "Recuperaciones"},
+                {"key": "possession_won_final_3rd", "nombre": "Recuperaciones campo rival"}
+            ]
+        },
+        "disciplina": {
+            "nombre": "Disciplina",
+            "icono": "bx-error",
+            "estadisticas": [
+                {"key": "fouls_committed", "nombre": "Faltas Cometidas"},
+                {"key": "yellow_cards", "nombre": "Tarjetas Amarillas"},
+                {"key": "red_cards", "nombre": "Tarjetas Rojas"},
+                {"key": "dribbled_past", "nombre": "Veces regateado"}
+            ]
+        }
+    }

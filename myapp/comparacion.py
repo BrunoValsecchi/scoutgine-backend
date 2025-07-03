@@ -545,3 +545,500 @@ def _convertir_posesion(posesion_str):
 
 # ✅ Mantener compatibilidad con imports antiguos
 GRUPOS_STATS = GRUPOS_STATS_EQUIPOS  # Para compatibilidad hacia atrás
+
+def comparar_equipos_completo(equipo1_id, equipo2_id):
+    """Compara dos equipos con TODAS las estadísticas agrupadas"""
+    try:
+        from .models import Equipo
+        from .statsequipo import obtener_grupos_stats_equipos
+        
+        print(f"🔍 === DEBUGGING COMPARACION EQUIPOS COMPLETO ===")
+        print(f"📋 Equipo 1 ID: {equipo1_id}")
+        print(f"📋 Equipo 2 ID: {equipo2_id}")
+        
+        # Obtener equipos
+        equipo1 = Equipo.objects.get(id=equipo1_id)
+        equipo2 = Equipo.objects.get(id=equipo2_id)
+        
+        print(f"✅ Equipos encontrados: {equipo1.nombre} vs {equipo2.nombre}")
+        
+        # Obtener todos los grupos de estadísticas
+        grupos_stats = obtener_grupos_stats_equipos()
+        
+        resultado = {
+            'equipo1': {
+                'id': equipo1.id,
+                'nombre': equipo1.nombre,
+                'nombre_corto': equipo1.nombre_corto or equipo1.nombre[:15],
+                'liga': getattr(equipo1, 'liga', 'Liga no especificada')
+            },
+            'equipo2': {
+                'id': equipo2.id,
+                'nombre': equipo2.nombre,
+                'nombre_corto': equipo2.nombre_corto or equipo2.nombre[:15],
+                'liga': getattr(equipo2, 'liga', 'Liga no especificada')
+            },
+            'grupos': {}
+        }
+        
+        # Procesar cada grupo
+        for grupo_key, grupo_data in grupos_stats.items():
+            try:
+                print(f"🔄 Procesando grupo {grupo_key}")
+                
+                # Usar la función existente de comparación por grupo
+                comparacion_grupo = comparar_equipos(equipo1_id, equipo2_id, grupo_key)
+                
+                # ✅ CREAR ESTRUCTURA CORRECTA PARA EL FRONTEND
+                estadisticas_procesadas = []
+                for i, estadistica in enumerate(comparacion_grupo['estadisticas']):
+                    estadisticas_procesadas.append({
+                        'nombre': estadistica['nombre'],
+                        'valor_equipo1': comparacion_grupo['valores_equipo1'][i],
+                        'valor_equipo2': comparacion_grupo['valores_equipo2'][i],
+                        'max_valor': estadistica['max_valor']
+                    })
+                
+                resultado['grupos'][grupo_key] = {
+                    'nombre': grupo_data['nombre'],
+                    'icono': grupo_data.get('icono', 'bx-stats'),
+                    'estadisticas': estadisticas_procesadas
+                }
+                
+                print(f"✅ Grupo {grupo_key} procesado: {len(estadisticas_procesadas)} estadísticas")
+                
+            except Exception as e:
+                print(f"⚠️ Error procesando grupo {grupo_key}: {e}")
+                continue
+        
+        print(f"✅ Comparación completa generada: {len(resultado['grupos'])} grupos")
+        print(f"=== FIN DEBUGGING EQUIPOS COMPLETO ===\n")
+        
+        return resultado
+        
+    except Exception as e:
+        print(f"❌ Error en comparar_equipos_completo: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
+
+def comparar_jugadores_completo(jugador1_id, jugador2_id):
+    """Compara dos jugadores con TODAS las estadísticas agrupadas"""
+    try:
+        from .models import Jugador
+        from .statsjugadores import obtener_grupos_stats_jugadores
+        
+        # Obtener jugadores
+        jugador1 = Jugador.objects.get(id=jugador1_id)
+        jugador2 = Jugador.objects.get(id=jugador2_id)
+        
+        # Obtener todos los grupos de estadísticas
+        grupos_stats = obtener_grupos_stats_jugadores()
+        
+        resultado = {
+            'jugador1': {
+                'id': jugador1.id,
+                'nombre': jugador1.nombre,
+                'equipo': jugador1.equipo.nombre if jugador1.equipo else 'Sin equipo',
+                'posicion': getattr(jugador1, 'posicion', 'POS') or 'POS',
+                'edad': getattr(jugador1, 'edad', 0) or 0,
+                'pais': getattr(jugador1, 'pais', 'País no especificado') or 'País no especificado'
+            },
+            'jugador2': {
+                'id': jugador2.id,
+                'nombre': jugador2.nombre,
+                'equipo': jugador2.equipo.nombre if jugador2.equipo else 'Sin equipo',
+                'posicion': getattr(jugador2, 'posicion', 'POS') or 'POS',
+                'edad': getattr(jugador2, 'edad', 0) or 0,
+                'pais': getattr(jugador2, 'pais', 'País no especificado') or 'País no especificado'
+            },
+            'grupos': {}
+        }
+        
+        # Procesar cada grupo
+        for grupo_key, grupo_data in grupos_stats.items():
+            try:
+                # Usar la función existente de comparación por grupo
+                comparacion_grupo = comparar_jugadores(jugador1_id, jugador2_id, grupo_key)
+                
+                resultado['grupos'][grupo_key] = {
+                    'nombre': grupo_data['nombre'],
+                    'icono': grupo_data.get('icono', 'bx-stats'),
+                    'estadisticas': comparacion_grupo['estadisticas'],
+                    'valores_jugador1': comparacion_grupo['valores_jugador1'],
+                    'valores_jugador2': comparacion_grupo['valores_jugador2']
+                }
+                
+            except Exception as e:
+                print(f"⚠️ Error procesando grupo {grupo_key}: {e}")
+                continue
+        
+        return resultado
+        
+    except Exception as e:
+        print(f"❌ Error en comparar_jugadores_completo: {e}")
+        raise e
+
+# ✅ FUNCIONES BÁSICAS PARA GRÁFICOS (ESTAS ESTABAN FALTANDO)
+def comparar_equipos(equipo1_id, equipo2_id, grupo):
+    """Compara dos equipos por grupo específico CON PERCENTILES"""
+    try:
+        from .models import Equipo, EstadisticasEquipo
+        
+        print(f"🔍 === DEBUGGING COMPARACION EQUIPOS (CON PERCENTILES) ===")
+        print(f"📋 Equipo 1 ID: {equipo1_id}")
+        print(f"📋 Equipo 2 ID: {equipo2_id}")
+        print(f"📋 Grupo: {grupo}")
+        
+        # Obtener equipos
+        equipo1 = Equipo.objects.get(id=equipo1_id)
+        equipo2 = Equipo.objects.get(id=equipo2_id)
+        
+        # Obtener estadísticas
+        stats1 = EstadisticasEquipo.objects.filter(equipo=equipo1).first()
+        stats2 = EstadisticasEquipo.objects.filter(equipo=equipo2).first()
+        
+        if not stats1 or not stats2:
+            equipos_sin_stats = []
+            if not stats1:
+                equipos_sin_stats.append(equipo1.nombre)
+            if not stats2:
+                equipos_sin_stats.append(equipo2.nombre)
+            
+            error_message = f'No hay estadísticas disponibles para: {", ".join(equipos_sin_stats)}'
+            raise ValueError(error_message)
+        
+        # Mapeo de grupos a campos
+        grupos_mapping = {
+            "ofensivo": ["goals_per_match", "expected_goals_xg", "shots_on_target_per_match", "big_chances", "touches_in_opposition_box"],
+            "creacion": ["accurate_passes_per_match", "accurate_long_balls_per_match", "accurate_crosses_per_match", "average_possession"],
+            "defensivo": ["goals_conceded_per_match", "clean_sheets", "interceptions_per_match", "successful_tackles_per_match"],
+            "general": ["fotmob_rating", "fouls_per_match", "yellow_cards", "red_cards"]
+        }
+        
+        estadisticas_grupo = grupos_mapping.get(grupo, [])
+        if not estadisticas_grupo:
+            available_groups = list(grupos_mapping.keys())
+            raise ValueError(f'Grupo "{grupo}" no reconocido. Disponibles: {available_groups}')
+        
+        # ✅ OBTENER TODOS LOS VALORES DE TODOS LOS EQUIPOS PARA CALCULAR PERCENTILES
+        print("📊 Calculando percentiles para todos los equipos...")
+        
+        all_teams_stats = EstadisticasEquipo.objects.all()
+        valores_todos_equipos = {}
+        
+        # Recopilar todos los valores por campo
+        for stat_key in estadisticas_grupo:
+            valores_todos_equipos[stat_key] = []
+            for team_stat in all_teams_stats:
+                valor = getattr(team_stat, stat_key, 0) or 0
+                try:
+                    valor_float = float(str(valor).replace('%', ''))
+                    valores_todos_equipos[stat_key].append(valor_float)
+                except:
+                    valores_todos_equipos[stat_key].append(0.0)
+        
+        # Construir respuesta
+        estadisticas = []
+        valores_equipo1 = []
+        valores_equipo2 = []
+        
+        # Traducciones
+        traducciones = {
+            'goals_per_match': 'Goles por partido',
+            'expected_goals_xg': 'Goles esperados (xG)',
+            'shots_on_target_per_match': 'Tiros al arco por partido',
+            'big_chances': 'Ocasiones claras',
+            'touches_in_opposition_box': 'Toques en área rival',
+            'accurate_passes_per_match': 'Pases precisos por partido',
+            'accurate_long_balls_per_match': 'Pases largos precisos',
+            'accurate_crosses_per_match': 'Centros precisos',
+            'average_possession': 'Posesión promedio',
+            'goals_conceded_per_match': 'Goles concedidos por partido',
+            'clean_sheets': 'Vallas invictas',
+            'interceptions_per_match': 'Intercepciones por partido',
+            'successful_tackles_per_match': 'Entradas exitosas',
+            'fotmob_rating': 'Rating FotMob',
+            'fouls_per_match': 'Faltas por partido',
+            'yellow_cards': 'Tarjetas amarillas',
+            'red_cards': 'Tarjetas rojas'
+        }
+        
+        # ✅ PROCESAR CADA ESTADÍSTICA CON PERCENTILES
+        for stat_key in estadisticas_grupo:
+            # Obtener valores brutos
+            valor1_bruto = getattr(stats1, stat_key, 0) or 0
+            valor2_bruto = getattr(stats2, stat_key, 0) or 0
+            
+            # Convertir a float
+            try:
+                valor1_bruto = float(str(valor1_bruto).replace('%', ''))
+            except:
+                valor1_bruto = 0.0
+            try:
+                valor2_bruto = float(str(valor2_bruto).replace('%', ''))
+            except:
+                valor2_bruto = 0.0
+            
+            # ✅ CALCULAR PERCENTILES
+            todos_valores = valores_todos_equipos[stat_key]
+            valor1_percentil = calcular_percentil(valor1_bruto, todos_valores)
+            valor2_percentil = calcular_percentil(valor2_bruto, todos_valores)
+            
+            print(f"📊 {stat_key}: {equipo1.nombre}={valor1_bruto} (percentil {valor1_percentil}), {equipo2.nombre}={valor2_bruto} (percentil {valor2_percentil})")
+            
+            nombre_stat = traducciones.get(stat_key, stat_key.replace('_', ' ').title())
+            
+            estadisticas.append({
+                'nombre': nombre_stat,
+                'max_valor': 100  # ✅ MÁXIMO PARA PERCENTILES ES 100
+            })
+            
+            # ✅ USAR PERCENTILES EN LUGAR DE VALORES BRUTOS
+            valores_equipo1.append(valor1_percentil)
+            valores_equipo2.append(valor2_percentil)
+        
+        # Respuesta con información de equipos
+        resultado = {
+            'estadisticas': estadisticas,
+            'valores_equipo1': valores_equipo1,  # ✅ AHORA SON PERCENTILES
+            'valores_equipo2': valores_equipo2,  # ✅ AHORA SON PERCENTILES
+            'equipo1': {
+                'id': equipo1.id,
+                'nombre': equipo1.nombre,
+                'nombre_corto': equipo1.nombre_corto or equipo1.nombre[:15],
+                'liga': getattr(equipo1, 'liga', 'Liga no especificada')
+            },
+            'equipo2': {
+                'id': equipo2.id,
+                'nombre': equipo2.nombre,
+                'nombre_corto': equipo2.nombre_corto or equipo2.nombre[:15],
+                'liga': getattr(equipo2, 'liga', 'Liga no especificada')
+            }
+        }
+        
+        print(f"✅ Resultado generado con percentiles")
+        print(f"=== FIN DEBUGGING EQUIPOS PERCENTILES ===\n")
+        
+        return resultado
+        
+    except Exception as e:
+        print(f"❌ Error en comparar_equipos: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
+
+def comparar_jugadores(jugador1_id, jugador2_id, grupo):
+    """Compara dos jugadores por grupo específico CON PERCENTILES"""
+    try:
+        from .models import Jugador, EstadisticasJugador
+        
+        print(f"\n🔍 === DEBUGGING COMPARACION JUGADORES (CON PERCENTILES) ===")
+        print(f"📋 Jugador 1 ID: {jugador1_id}")
+        print(f"📋 Jugador 2 ID: {jugador2_id}")
+        print(f"📋 Grupo: {grupo}")
+        
+        # Obtener jugadores
+        jugador1 = Jugador.objects.get(id=jugador1_id)
+        jugador2 = Jugador.objects.get(id=jugador2_id)
+        
+        # Obtener estadísticas
+        stats1 = EstadisticasJugador.objects.filter(jugador=jugador1).first()
+        stats2 = EstadisticasJugador.objects.filter(jugador=jugador2).first()
+        
+        # Validar que ambos tengan estadísticas
+        if not stats1 or not stats2:
+            jugadores_sin_stats = []
+            if not stats1:
+                jugadores_sin_stats.append(jugador1.nombre)
+            if not stats2:
+                jugadores_sin_stats.append(jugador2.nombre)
+            
+            error_message = {
+                'message': f'No se pueden comparar gráficamente: {" y ".join(jugadores_sin_stats)}',
+                'details': [f"{j} no completó los 300 minutos mínimos requeridos" for j in jugadores_sin_stats],
+                'players_without_stats': jugadores_sin_stats,
+                'reason': 'insufficient_minutes'
+            }
+            raise ValueError(error_message)
+        
+        # Mapeo de grupos a campos
+        grupos_mapping = {
+            "arquero": [
+                "saves", "save_percentage", "goals_conceded", "goals_prevented", 
+                "clean_sheets", "error_led_to_goal", "high_claim", "pass_accuracy", 
+                "accurate_long_balls", "long_ball_accuracy"
+            ],
+            "ofensivo": [
+                "goals", "expected_goals_xg", "xg_on_target_xgot", "non_penalty_xg",
+                "shots", "shots_on_target", "assists", "expected_assists_xa",
+                "touches_in_opposition_box", "penalties_awarded"
+            ],
+            "creacion": [
+                "assists", "successful_passes", "pass_accuracy_outfield", "accurate_long_balls_outfield",
+                "long_ball_accuracy_outfield", "chances_created", "successful_crosses", "cross_accuracy", "touches"
+            ],
+            "regates": [
+                "successful_dribbles", "dribble_success", "dispossessed", "fouls_won"
+            ],
+            "defensivo": [
+                "tackles_won", "tackles_won_percentage", "duels_won", "duels_won_percentage",
+                "aerial_duels_won", "aerial_duels_won_percentage", "interceptions", "blocked",
+                "recoveries", "possession_won_final_3rd"
+            ],
+            "disciplina": [
+                "fouls_committed", "yellow_cards", "red_cards", "dribbled_past"
+            ]
+        }
+        
+        estadisticas_grupo = grupos_mapping.get(grupo, [])
+        if not estadisticas_grupo:
+            raise ValueError(f'Grupo "{grupo}" no reconocido. Disponibles: {list(grupos_mapping.keys())}')
+        
+        # ✅ OBTENER TODOS LOS VALORES DE TODOS LOS JUGADORES PARA CALCULAR PERCENTILES
+        print("📊 Calculando percentiles para todos los jugadores...")
+        
+        all_players_stats = EstadisticasJugador.objects.all()
+        valores_todos_jugadores = {}
+        
+        # Recopilar todos los valores por campo
+        for stat_key in estadisticas_grupo:
+            valores_todos_jugadores[stat_key] = []
+            for player_stat in all_players_stats:
+                valor = getattr(player_stat, stat_key, 0)
+                try:
+                    valor_float = float(valor) if valor is not None else 0.0
+                    if valor_float > 0:  # Solo valores positivos para percentiles
+                        valores_todos_jugadores[stat_key].append(valor_float)
+                except (ValueError, TypeError):
+                    pass
+        
+        # Construir respuesta
+        estadisticas = []
+        valores_jugador1 = []
+        valores_jugador2 = []
+        
+        # Traducciones completas
+        traducciones = {
+            # ARQUEROS (10)
+            'saves': 'Atajadas',
+            'save_percentage': '% Atajadas',
+            'goals_conceded': 'Goles Concedidos',
+            'goals_prevented': 'Goles Prevenidos',
+            'clean_sheets': 'Vallas Invictas',
+            'error_led_to_goal': 'Errores que llevaron a gol',
+            'high_claim': 'Salidas en alto',
+            'pass_accuracy': 'Precisión de pases (GK)',
+            'accurate_long_balls': 'Pases largos precisos (GK)',
+            'long_ball_accuracy': 'Precisión pases largos (GK)',
+            
+            # OFENSIVO (10)
+            'goals': 'Goles',
+            'expected_goals_xg': 'xG',
+            'xg_on_target_xgot': 'xG en el arco',
+            'non_penalty_xg': 'xG sin penales',
+            'shots': 'Tiros',
+            'shots_on_target': 'Tiros al Arco',
+            'assists': 'Asistencias',
+            'expected_assists_xa': 'xA',
+            'touches_in_opposition_box': 'Toques en área rival',
+            'penalties_awarded': 'Penales provocados',
+            
+            # CREACIÓN Y PASES (9)
+            'successful_passes': 'Pases Exitosos',
+            'pass_accuracy_outfield': 'Precisión de pases',
+            'accurate_long_balls_outfield': 'Pases largos precisos',
+            'long_ball_accuracy_outfield': 'Precisión pases largos',
+            'chances_created': 'Ocasiones Creadas',
+            'successful_crosses': 'Centros exitosos',
+            'cross_accuracy': 'Precisión de centros',
+            'touches': 'Toques',
+            
+            # REGATES Y HABILIDAD (4)
+            'successful_dribbles': 'Regates exitosos',
+            'dribble_success': 'Éxito en regates',
+            'dispossessed': 'Pérdidas de balón',
+            'fouls_won': 'Faltas Recibidas',
+            
+            # DEFENSIVO (10)
+            'tackles_won': 'Entradas Ganadas',
+            'tackles_won_percentage': '% Entradas ganadas',
+            'duels_won': 'Duelos Ganados',
+            'duels_won_percentage': '% Duelos ganados',
+            'aerial_duels_won': 'Duelos aéreos ganados',
+            'aerial_duels_won_percentage': '% Duelos aéreos',
+            'interceptions': 'Intercepciones',
+            'blocked': 'Bloqueos',
+            'recoveries': 'Recuperaciones',
+            'possession_won_final_3rd': 'Recuperaciones campo rival',
+            
+            # DISCIPLINA (4)
+            'fouls_committed': 'Faltas Cometidas',
+            'yellow_cards': 'Tarjetas Amarillas',
+            'red_cards': 'Tarjetas Rojas',
+            'dribbled_past': 'Veces regateado'
+        }
+        
+        # ✅ PROCESAR CADA ESTADÍSTICA CON PERCENTILES
+        for stat_key in estadisticas_grupo:
+            # Obtener valores brutos
+            valor1_bruto = getattr(stats1, stat_key, 0)
+            valor2_bruto = getattr(stats2, stat_key, 0)
+            
+            # Convertir a float de forma segura
+            try:
+                valor1_bruto = float(valor1_bruto) if valor1_bruto is not None else 0.0
+            except (ValueError, TypeError):
+                valor1_bruto = 0.0
+            
+            try:
+                valor2_bruto = float(valor2_bruto) if valor2_bruto is not None else 0.0
+            except (ValueError, TypeError):
+                valor2_bruto = 0.0
+            
+            # ✅ CALCULAR PERCENTILES
+            todos_valores = valores_todos_jugadores[stat_key]
+            if todos_valores:
+                valor1_percentil = calcular_percentil(valor1_bruto, todos_valores)
+                valor2_percentil = calcular_percentil(valor2_bruto, todos_valores)
+            else:
+                valor1_percentil = 50
+                valor2_percentil = 50
+            
+            print(f"📊 {stat_key}: {jugador1.nombre}={valor1_bruto} (percentil {valor1_percentil}), {jugador2.nombre}={valor2_bruto} (percentil {valor2_percentil})")
+            
+            nombre_stat = traducciones.get(stat_key, stat_key.replace('_', ' ').title())
+            
+            estadisticas.append({
+                'nombre': nombre_stat,
+                'max_valor': 100  # ✅ MÁXIMO PARA PERCENTILES ES 100
+            })
+            
+            # ✅ USAR PERCENTILES EN LUGAR DE VALORES BRUTOS
+            valores_jugador1.append(valor1_percentil)
+            valores_jugador2.append(valor2_percentil)
+        
+        resultado = {
+            'estadisticas': estadisticas,
+            'valores_jugador1': valores_jugador1,  # ✅ AHORA SON PERCENTILES
+            'valores_jugador2': valores_jugador2,  # ✅ AHORA SON PERCENTILES
+            'jugador1': {
+                'id': jugador1.id,
+                'nombre': jugador1.nombre
+            },
+            'jugador2': {
+                'id': jugador2.id,
+                'nombre': jugador2.nombre
+            }
+        }
+        
+        print(f"✅ Comparación exitosa con percentiles")
+        print(f"=== FIN DEBUGGING JUGADORES PERCENTILES ===\n")
+        
+        return resultado
+        
+    except Exception as e:
+        print(f"❌ Error en comparar_jugadores: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e

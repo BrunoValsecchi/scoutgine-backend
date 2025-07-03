@@ -231,7 +231,7 @@ def stats_equipos(request):
             'accurate_crosses_per_match': 'Centros precisos por partido',
             
             # Defensa (7)
-            'xg_conceded': 'xG concedidos',
+            'xg_concedidos': 'xG concedidos',
             'interceptions_per_match': 'Intercepciones por partido',
             'successful_tackles_per_match': 'Tackles exitosos por partido',
             'clearances_per_match': 'Despejes por partido',
@@ -317,7 +317,7 @@ def stats_equipos(request):
         'shots_on_target_per_match': 'Tiros al arco por partido',
         'big_chances': 'Grandes oportunidades',
         'big_chances_missed': 'Grandes oportunidades perdidas',
-        'penalties_awarded': 'Penales a favor',
+        'penales_awarded': 'Penales a favor',
         'touches_in_opposition_box': 'Toques en área rival',
         'corners': 'Córners',
         
@@ -327,7 +327,7 @@ def stats_equipos(request):
         'accurate_crosses_per_match': 'Centros precisos por partido',
         
         # Defensa (7)
-        'xg_conceded': 'xG concedidos',
+        'xg_concedidos': 'xG concedidos',
         'interceptions_per_match': 'Intercepciones por partido',
         'successful_tackles_per_match': 'Tackles exitosos por partido',
         'clearances_per_match': 'Despejes por partido',
@@ -427,7 +427,7 @@ def obtener_stats_resumen():
         'accurate_crosses_per_match': 'Centros precisos por partido',
         
         # Defensa (7)
-        'xg_conceded': 'xG concedidos',
+        'xg_concedidos': 'xG concedidos',
         'interceptions_per_match': 'Intercepciones por partido',
         'successful_tackles_per_match': 'Tackles exitosos por partido',
         'clearances_per_match': 'Despejes por partido',
@@ -483,3 +483,49 @@ def obtener_stats_resumen():
             top3_por_estadistica[label] = []
     
     return top3_por_estadistica
+
+def obtener_grupos_stats_equipos():
+    """Devuelve los grupos de estadísticas de equipos"""
+    return {
+        "ofensivo": {
+            "nombre": "Ofensivo",
+            "icono": "bx-football",
+            "estadisticas": [
+                {"key": "goals_per_match", "nombre": "Goles por partido"},
+                {"key": "expected_goals_xg", "nombre": "Goles esperados (xG)"},
+                {"key": "shots_on_target_per_match", "nombre": "Tiros al arco por partido"},
+                {"key": "big_chances", "nombre": "Ocasiones claras"},
+                {"key": "touches_in_opposition_box", "nombre": "Toques en área rival"}
+            ]
+        },
+        "creacion": {
+            "nombre": "Creación",
+            "icono": "bx-transfer",
+            "estadisticas": [
+                {"key": "accurate_passes_per_match", "nombre": "Pases precisos por partido"},
+                {"key": "accurate_long_balls_per_match", "nombre": "Pases largos precisos"},
+                {"key": "accurate_crosses_per_match", "nombre": "Centros precisos"},
+                {"key": "average_possession", "nombre": "Posesión promedio"}
+            ]
+        },
+        "defensivo": {
+            "nombre": "Defensivo",
+            "icono": "bx-shield",
+            "estadisticas": [
+                {"key": "goals_conceded_per_match", "nombre": "Goles concedidos por partido"},
+                {"key": "clean_sheets", "nombre": "Vallas invictas"},
+                {"key": "interceptions_per_match", "nombre": "Intercepciones por partido"},
+                {"key": "successful_tackles_per_match", "nombre": "Entradas exitosas"}
+            ]
+        },
+        "general": {
+            "nombre": "General",
+            "icono": "bx-stats",
+            "estadisticas": [
+                {"key": "fotmob_rating", "nombre": "Rating FotMob"},
+                {"key": "fouls_per_match", "nombre": "Faltas por partido"},
+                {"key": "yellow_cards", "nombre": "Tarjetas amarillas"},
+                {"key": "red_cards", "nombre": "Tarjetas rojas"}
+            ]
+        }
+    }
