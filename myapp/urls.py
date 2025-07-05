@@ -2,7 +2,6 @@ from django.urls import path
 from . import views
 from .ligas import ligas
 from .statsequipo import stats_equipos
-from .grafico_equipo import ajax_radar_equipo
 from .estadistica_jugador import (
     ajax_radar_jugador,
     ajax_ranking_jugadores,
@@ -10,7 +9,8 @@ from .estadistica_jugador import (
     ajax_percentil_jugador,
     ajax_grafico_dispersion_jugador,
     api_jugador_posiciones,
-    ajax_boxplot_jugador
+    ajax_boxplot_jugador,
+    ajax_jugador_estadistica
 )
 from . import statsjugadores
 
@@ -35,7 +35,7 @@ urlpatterns = [
     path('ajax/recomendar-jugadores/', views.ajax_recomendar_jugadores, name='ajax_recomendar_jugadores'),
     path('ajax/grafico-dispersion/', views.ajax_grafico_dispersion, name='ajax_grafico_dispersion'),
     path('ajax/analisis-correlacion/', views.ajax_analisis_correlacion, name='ajax_analisis_correlacion'),
-    path('ajax/radar-equipo/', ajax_radar_equipo, name='ajax_radar_equipo'),
+    path('ajax/radar-equipo/', views.ajax_radar_equipo, name='ajax_radar_equipo'),
     path('ajax/boxplot-estadistica/', views.ajax_boxplot_estadistica, name='ajax_boxplot_estadistica'),
     path('ajax/radar-jugador/', ajax_radar_jugador, name='ajax_radar_jugador'),
     path('ajax/ranking-jugadores/', ajax_ranking_jugadores, name='ajax_ranking_jugadores'),
@@ -43,12 +43,11 @@ urlpatterns = [
     path('ajax/percentil-jugador/', ajax_percentil_jugador, name='ajax_percentil_jugador'),
     path('ajax/grafico-dispersion-jugador/', ajax_grafico_dispersion_jugador, name='ajax_grafico_dispersion_jugador'),
     path('ajax/boxplot-jugador/', ajax_boxplot_jugador, name='ajax_boxplot_jugador'),
-    path('ajax/stats-jugadores/', statsjugadores.stats_jugadores, name='ajax_stats_jugadores'),
+    path('api/jugador/<int:jugador_id>/posiciones/', api_jugador_posiciones, name='api_jugador_posiciones'),
 
     # ✅ OTRAS PÁGINAS Y APIS
     path('grafico/', views.grafico, name='grafico'),
     path('jugador/<int:jugador_id>/grafico/<str:estadistica>/', views.grafico_jugador_view, name='grafico_jugador'),
-    path('api/jugador/<int:jugador_id>/posiciones/', api_jugador_posiciones, name='api_jugador_posiciones'),
     
     # ✅ RUTAS GENÉRICAS AL FINAL
     path('ajax/equipo/<int:equipo_id>/estadistica/<str:estadistica>/', views.ajax_equipo_estadistica_detalle, name='ajax_equipo_estadistica_detalle'),
@@ -65,4 +64,5 @@ urlpatterns = [
     # ✅ RUTAS PARA GRUPOS DE ESTADÍSTICAS
     path('ajax/grupos-stats-equipos/', views.ajax_grupos_stats_equipos, name='ajax_grupos_stats_equipos'),
     path('ajax/grupos-stats-jugadores/', views.ajax_grupos_stats_jugadores, name='ajax_grupos_stats_jugadores'),
+    path('ajax/jugador/<int:jugador_id>/estadistica/<str:estadistica>/', ajax_jugador_estadistica, name='ajax_jugador_estadistica'),
 ]

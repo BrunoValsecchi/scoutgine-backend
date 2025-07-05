@@ -26,26 +26,24 @@ ALLOWED_HOSTS = [
 
 # Application definition
 INSTALLED_APPS = [
+    'corsheaders',  # ✅ AGREGAR ESTA LÍNEA AL INICIO
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_extensions',
-    'corsheaders',  # ← AGREGAR ESTO
     'myapp',
     'rest_framework',
 ]
 
 # MIDDLEWARE - AGREGAR WHITENOISE
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # ✅ PRIMERO
+    'corsheaders.middleware.CorsMiddleware',  # ✅ AGREGAR AL INICIO
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # ← AGREGAR ESTA LÍNEA
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',  # ✅ DESPUÉS DE CORS
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -140,7 +138,12 @@ REST_FRAMEWORK = {
 }
 
 # CORS CONFIGURATION
-CORS_ALLOW_ALL_ORIGINS = True  # Para desarrollo
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:8080",
+    "http://localhost:8080",
+    "http://127.0.0.1:5500",  # Por si usas Live Server de VS Code
+    "http://localhost:5500",
+]
 
 CORS_ALLOW_CREDENTIALS = True
 

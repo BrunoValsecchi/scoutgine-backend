@@ -318,7 +318,7 @@ def stats_equipos(request):
         'big_chances': 'Grandes oportunidades',
         'big_chances_missed': 'Grandes oportunidades perdidas',
         'penales_awarded': 'Penales a favor',
-        'touches_in_opposition_box': 'Toques en área rival',
+       
         'corners': 'Córners',
         
         # Pases (3)

@@ -7,7 +7,6 @@ from django.views.decorators.http import require_POST
 from .models import Posicion, Equipo, EstadisticasEquipo, Jugador
 import json
 import random
-# import numpy as np
 from .estadistica_jugador import grafico_jugador_view
 from .comparacion import GRUPOS_STATS, GRUPOS_STATS_EQUIPOS, GRUPOS_STATS_JUGADORES# ============================================================================
 # VISTAS PRINCIPALES
@@ -132,23 +131,26 @@ def grafico_equipo(request, equipo_id, stat_name=None, estadistica=None):
                 'status': 'error'
             }, status=404)
         
-        # ✅ USAR EL TEMPLATE CORRECTO: estadistica_detalle.html
-        return render(request, 'estadistica_detalle.html', {
+        # ✅ RENDERIZAR EL TEMPLATE CON CONTEXT
+        context = {
             'equipo_id': equipo_id,
             'equipo_nombre': equipo.nombre,
             'stat_name': stat_to_use,
             'page_title': f'{stat_to_use} - {equipo.nombre}'
-        })
+        }
+        
+        return render(request, 'estadistica_detalle.html', context)
         
     except Exception as e:
         print(f"❌ Error general en grafico_equipo: {e}")
         import traceback
         traceback.print_exc()
         
-        return JsonResponse({
+        return render(request, 'estadistica_detalle.html', {
             'error': f'Error interno: {str(e)}',
-            'status': 'error'
-        }, status=500)
+            'equipo_id': equipo_id,
+            'stat_name': stat_to_use or 'estadistica'
+        })
 def generar_graficos_completos(equipo, estadistica, valor_equipo, equipos_nombres, equipos_valores, estadisticas_obj):
     """Genera todos los gráficos para la estadística"""
     from pyecharts.charts import Bar, Line, Gauge
@@ -365,111 +367,104 @@ def generar_graficos_completos(equipo, estadistica, valor_equipo, equipos_nombre
 # ============================================================================
 
 def ajax_grafico_dispersion(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            equipo_id = data.get('equipo_id')
-            stat_principal = data.get('stat_principal')
-            stat_comparacion = data.get('stat_comparacion', 'Rating')
-            
-            print(f"🔍 AJAX Dispersión - Principal: {stat_principal}, Comparación: {stat_comparacion}")
-            
-            # MAPEO COMPLETO DE ESTADÍSTICAS
-            STAT_MAPPING = {
-                'Rating': 'fotmob_rating',
-                'Goles por partido': 'goals_per_match',
-                'Goles concedidos por partido': 'goals_conceded_per_match',
-                'Posesión promedio': 'average_possession',
-                'Vallas invictas': 'clean_sheets',
-                'Goles esperados (xG)': 'expected_goals_xg',
-                'Tiros al arco por partido': 'shots_on_target_per_match',
-                'Ocasiones claras': 'big_chances',
-                'Ocasiones claras falladas': 'big_chances_missed',
-                'xG concedido': 'xg_concedido',
-                'Intercepciones por partido': 'interceptions_per_match',
-                'Entradas exitosas por partido': 'successful_tackles_per_match',
-                'Despejes por partido': 'clearances_per_match',
-                'Atajadas por partido': 'saves_per_match',
-                'Faltas por partido': 'fouls_per_match',
-                'Tarjetas amarillas': 'yellow_cards',
-                'Tarjetas rojas': 'red_cards',
-                'Pases precisos por partido': 'accurate_passes_per_match',
-                'Pases largos precisos por partido': 'accurate_long_balls_per_match',
-                'Centros precisos por partido': 'accurate_crosses_per_match',
-                'Toques en el área rival': 'touches_in_opposition_box',
-                'Tiros de esquina': 'corners',
-                'Recuperaciones en el último tercio': 'possession_won_final_3rd_per_match',
-                'Penales a favor': 'penalties_awarded',
-            }
-            
-            field_principal = STAT_MAPPING.get(stat_principal)
-            field_comparacion = STAT_MAPPING.get(stat_comparacion)
-            
-            print(f"🔍 Fields - Principal: {field_principal}, Comparación: {field_comparacion}")
-            
-            if not field_principal:
-                return JsonResponse({
-                    'success': False, 
-                    'error': f'Estadística principal no válida: {stat_principal}'
-                })
-                
-            if not field_comparacion:
-                return JsonResponse({
-                    'success': False, 
-                    'error': f'Estadística de comparación no válida: {stat_comparacion}'
-                })
-            
-            # Obtener datos de todos los equipos
-            equipos_data = []
-            todos_equipos = EstadisticasEquipo.objects.select_related('equipo').all()
-            
-            print(f"🔍 Total equipos en BD: {todos_equipos.count()}")
-            
-            for eq_stat in todos_equipos:
-                val_principal = getattr(eq_stat, field_principal, None)
-                val_comparacion = getattr(eq_stat, field_comparacion, None)
-                
-                if val_principal is not None and val_comparacion is not None:
-                    try:
-                        equipos_data.append({
-                            'nombre': eq_stat.equipo.nombre_corto or eq_stat.equipo.nombre[:15],
-                            'stat_principal': float(val_principal),
-                            'stat_comparacion': float(val_comparacion),
-                            'es_actual': eq_stat.equipo.id == int(equipo_id)
-                        })
-                    except (ValueError, TypeError):
-                        continue
-            
-            print(f"🔍 Equipos con datos válidos: {len(equipos_data)}")
-            
-            if not equipos_data:
-                return JsonResponse({
-                    'success': False, 
-                    'error': f'No se encontraron datos para {stat_principal} vs {stat_comparacion}'
-                })
-            
-            # Calcular promedios
-            promedio_principal = sum(eq['stat_principal'] for eq in equipos_data) / len(equipos_data)
-            promedio_comparacion = sum(eq['stat_comparacion'] for eq in equipos_data) / len(equipos_data)
-            
-            print(f"✅ Dispersión exitosa: {len(equipos_data)} equipos")
-            
+    """API para gráfico de dispersión con datos REALES"""
+    try:
+        equipo_id = request.GET.get('equipo_id')
+        stat_principal = request.GET.get('stat_principal')
+        stat_comparacion = request.GET.get('stat_comparacion', 'Rating FotMob')
+        
+        print(f"📊 Dispersión - Equipo: {equipo_id}, Principal: {stat_principal}, Comparación: {stat_comparacion}")
+        
+        if not equipo_id or not stat_principal:
+            return JsonResponse({'error': 'Parámetros faltantes'}, status=400)
+        
+        # ✅ MAPEO DE ESTADÍSTICAS REALES
+        STAT_MAPPING = {
+            'Rating': 'fotmob_rating',  # <-- AGREGA ESTA LÍNEA
+    'Rating FotMob': 'fotmob_rating',
+            'Rating FotMob': 'fotmob_rating',
+            'Goles por partido': 'goals_per_match',
+            'Goles concedidos por partido': 'goals_conceded_per_match',
+            'Posesión promedio': 'average_possession',
+            'Vallas invictas': 'clean_sheets',
+            'Goles esperados (xG)': 'expected_goals_xg',
+            'Tiros al arco por partido': 'shots_on_target_per_match',
+            'Ocasiones claras': 'big_chances',
+            'Ocasiones claras falladas': 'big_chances_missed',
+            'Pases precisos por partido': 'accurate_passes_per_match',
+            'Pases largos precisos por partido': 'accurate_long_balls_per_match',
+            'Centros precisos por partido': 'accurate_crosses_per_match',
+            'Toques en el área rival': 'touches_in_opposition_box',
+            'Tiros de esquina': 'corners',
+            'Xg concedido': 'xg_concedido',
+            'Intercepciones por partido': 'interceptions_per_match',
+            'Entradas exitosas por partido': 'successful_tackles_per_match',
+            'Despejes por partido': 'clearances_per_match',
+            'Atajadas por partido': 'saves_per_match',
+            'Faltas por partido': 'fouls_per_match',
+            'Tarjetas amarillas': 'yellow_cards',
+            'Tarjetas rojas': 'red_cards',
+            'Penales a favor': 'penalties_awarded',
+            'Recuperaciones en el último tercio': 'possession_won_final_3rd_per_match'
+        }
+        
+        # ✅ OBTENER CAMPOS REALES
+        campo_principal = STAT_MAPPING.get(stat_principal)
+        campo_comparacion = STAT_MAPPING.get(stat_comparacion)
+        
+        if not campo_principal or not campo_comparacion:
             return JsonResponse({
-                'success': True,
-                'chart_data': {
-                    'equipos': equipos_data,
-                    'promedio_principal': round(promedio_principal, 2),
-                    'promedio_comparacion': round(promedio_comparacion, 2)
-                }
-            })
+                'error': f'Estadística no válida: {stat_principal} o {stat_comparacion}'
+            }, status=400)
+        
+        # ✅ OBTENER DATOS REALES DE TODOS LOS EQUIPOS
+        equipos_stats = EstadisticasEquipo.objects.select_related('equipo').exclude(
+            **{f'{campo_principal}__isnull': True}
+        ).exclude(
+            **{f'{campo_comparacion}__isnull': True}
+        )
+        
+        equipos_data = []
+        for eq_stat in equipos_stats:
+            valor_principal = getattr(eq_stat, campo_principal, None)
+            valor_comparacion = getattr(eq_stat, campo_comparacion, None)
             
-        except Exception as e:
-            print(f"❌ Error AJAX dispersión: {e}")
-            import traceback
-            traceback.print_exc()
-            return JsonResponse({'success': False, 'error': str(e)})
-    return JsonResponse({'success': False, 'error': 'Método no permitido'})
-
+            # ✅ SOLO INCLUIR SI AMBOS VALORES EXISTEN Y SON VÁLIDOS
+            if (valor_principal is not None and valor_comparacion is not None and 
+                valor_principal != 0 and valor_comparacion != 0):
+                try:
+                    equipos_data.append({
+                        'nombre': eq_stat.equipo.nombre_corto or eq_stat.equipo.nombre[:15],
+                        'stat_principal': float(valor_principal),
+                        'stat_comparacion': float(valor_comparacion),
+                        'es_actual': eq_stat.equipo.id == int(equipo_id)
+                    })
+                except (TypeError, ValueError):
+                    continue
+        
+        # ✅ VERIFICAR QUE HAY SUFICIENTES DATOS
+        if len(equipos_data) < 3:
+            return JsonResponse({
+                'error': f'No hay suficientes datos reales para {stat_principal} vs {stat_comparacion}. Solo {len(equipos_data)} equipos tienen ambas estadísticas.'
+            }, status=404)
+        
+        print(f"📊 Dispersión con {len(equipos_data)} equipos con datos reales")
+        
+        return JsonResponse({
+            'success': True,
+            'chart_data': {
+                'equipos': equipos_data,
+                'stat_principal_name': stat_principal,
+                'stat_comparacion_name': stat_comparacion,
+                'total_equipos': len(equipos_data)
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Error en ajax_grafico_dispersion: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
 @require_POST  
 def ajax_analisis_correlacion(request):
     """Vista AJAX para análisis de correlación"""
@@ -492,29 +487,37 @@ def ajax_analisis_correlacion(request):
 def get_stats_data(stat_name, equipo_id=None):
     STAT_MAPPING = {
         'Rating': 'fotmob_rating',
+        'Rating FotMob': 'fotmob_rating',
+        'Goles': 'goals_per_match',
         'Goles por partido': 'goals_per_match',
+        'Goles concedidos': 'goals_conceded_per_match',
         'Goles concedidos por partido': 'goals_conceded_per_match',
+        'Posesión': 'average_possession',
         'Posesión promedio': 'average_possession',
         'Vallas invictas': 'clean_sheets',
         'Goles esperados (xG)': 'expected_goals_xg',
+        'Tiros al arco': 'shots_on_target_per_match',
         'Tiros al arco por partido': 'shots_on_target_per_match',
         'Ocasiones claras': 'big_chances',
         'Ocasiones claras falladas': 'big_chances_missed',
-        'xG concedido': 'xg_concedido',
-        'Intercepciones por partido': 'interceptions_per_match',
-        'Entradas exitosas por partido': 'successful_tackles_per_match',
-        'Despejes por partido': 'clearances_per_match',
-        'Atajadas por partido': 'saves_per_match',
-        'Faltas por partido': 'fouls_per_match',
-        'Tarjetas amarillas': 'yellow_cards',
-        'Tarjetas rojas': 'red_cards',
+        'Pases precisos': 'accurate_passes_per_match',
         'Pases precisos por partido': 'accurate_passes_per_match',
         'Pases largos precisos por partido': 'accurate_long_balls_per_match',
         'Centros precisos por partido': 'accurate_crosses_per_match',
-        'Toques en el área rival': 'touches_in_opposition_box',
-        'Tiros de esquina': 'corners',
-        'Recuperaciones en el último tercio': 'possession_won_final_3rd_per_match',
         'Penales a favor': 'penalties_awarded',
+        'Toques en el área rival': 'touches_in_opposition_box',
+        'Toques en área rival': 'touches_in_opposition_box',
+        'Tiros de esquina': 'corners',
+        'xG concedido': 'xg_concedido',
+        'Xg concedido': 'xg_concedido',
+        'Intercepciones por partido': 'interceptions_per_match',
+        'Entradas exitosas por partido': 'successful_tackles_per_match',
+        'Despejes por partido': 'clearances_per_match',
+        'Recuperaciones en el último tercio': 'possession_won_final_3rd_per_match',
+        'Atajadas por partido': 'saves_per_match',
+        'Faltas por partido': 'fouls_per_match',
+        'Tarjetas amarillas': 'yellow_cards',
+        'Tarjetas rojas': 'red_cards'
     }
     field_name = STAT_MAPPING.get(stat_name)
     if not field_name:
@@ -761,43 +764,64 @@ def ajax_equipo_plantilla(request, equipo_id):
     try:
         equipo = get_object_or_404(Equipo, id=equipo_id)
         
-        # Obtener jugadores ordenados por posición
+        # ✅ ORDEN DE POSICIONES CORRECTO
         orden_posiciones = [
-            "GK", "CB", "RB", "LB", "DM", "CM", "LM", "RM", "AM", "LW", "RW", "ST"
+            "COACH", "GK", "CB", "RB", "LB", "DEFENDER", "DM", "CM", "LM", "RM", "AM", "MIDFIELDER", "LW", "RW", "ST", "ATTACKER"
         ]
         
         jugadores = Jugador.objects.filter(equipo=equipo)
         
         def orden_jugador(j):
-            pos = (j.posicion or "").split(",")[0].strip().upper()
-            try:
-                idx = orden_posiciones.index(pos)
-            except ValueError:
-                idx = len(orden_posiciones)
+            # ✅ BUSCAR LA PRIMERA POSICIÓN QUE COINCIDA CON LA LISTA DE ORDEN
+            posiciones_jugador = [p.strip().upper() for p in (j.posicion or "").split(",") if p.strip()]
+            
+            # Buscar el índice más bajo (primera posición en el orden)
+            indices_encontrados = []
+            for pos in posiciones_jugador:
+                try:
+                    idx = orden_posiciones.index(pos)
+                    indices_encontrados.append(idx)
+                except ValueError:
+                    # Si no encuentra la posición exacta, buscar coincidencias parciales
+                    for i, pos_orden in enumerate(orden_posiciones):
+                        if pos in pos_orden or pos_orden in pos:
+                            indices_encontrados.append(i)
+                            break
+            
+            # Usar el índice más bajo (primera posición en la jerarquía)
+            idx = min(indices_encontrados) if indices_encontrados else len(orden_posiciones)
             return idx, j.nombre.lower()
         
         jugadores_ordenados = sorted(jugadores, key=orden_jugador)
         
         jugadores_data = []
         for jugador in jugadores_ordenados:
+            # ✅ MOSTRAR TODAS LAS POSICIONES, SEPARADAS POR COMA
+            posiciones_completas = []
+            if jugador.posicion:
+                for pos in jugador.posicion.split(","):
+                    pos_limpia = pos.strip()
+                    if pos_limpia:
+                        posiciones_completas.append(pos_limpia.upper())
+            
+            posiciones_str = ", ".join(posiciones_completas) if posiciones_completas else "POS"
+            
             jugadores_data.append({
                 'id': jugador.id,
                 'nombre': jugador.nombre,
-                'posicion': jugador.posicion,
+                'posicion': posiciones_str,  # ✅ TODAS LAS POSICIONES
                 'edad': jugador.edad,
                 'dorsal': jugador.dorsal,
                 'pais': jugador.pais,
                 'altura': jugador.altura,
-                'valor': jugador.valor
+                'valor_mercado': jugador.valor if hasattr(jugador, 'valor') and jugador.valor is not None else None,
+                'nacionalidad': jugador.pais or "N/A",
             })
         
         return JsonResponse({
             'jugadores': jugadores_data,
             'total_jugadores': len(jugadores_data),
-            'equipo': {
-                'id': equipo.id,
-                'nombre': equipo.nombre
-            },
+            'equipo_nombre': equipo.nombre,
             'status': 'success'
         })
         
@@ -807,6 +831,7 @@ def ajax_equipo_plantilla(request, equipo_id):
             'status': 'error'
         }, status=404)
     except Exception as e:
+        print(f"❌ Error en ajax_equipo_plantilla: {e}")
         return JsonResponse({
             'error': str(e),
             'status': 'error'
@@ -824,7 +849,7 @@ def ajax_equipo_estadisticas(request, equipo_id):
                 'status': 'error'
             }, status=404)
         
-        # Traducciones de campos
+        # ✅ TRADUCIR TODAS LAS ESTADÍSTICAS
         traducciones = {
             'fotmob_rating': 'Rating FotMob',
             'goals_per_match': 'Goles por partido',
@@ -836,13 +861,23 @@ def ajax_equipo_estadisticas(request, equipo_id):
             'big_chances': 'Ocasiones claras',
             'big_chances_missed': 'Ocasiones claras falladas',
             'accurate_passes_per_match': 'Pases precisos por partido',
+            'accurate_long_balls_per_match': 'Accurate long balls per match',
+            'accurate_crosses_per_match': 'Accurate crosses per match',
             'penalties_awarded': 'Penales a favor',
             'touches_in_opposition_box': 'Toques en área rival',
             'corners': 'Tiros de esquina',
+            'xg_concedido': 'Xg conceded',
             'interceptions_per_match': 'Intercepciones por partido',
-            'successful_tackles_per_match': 'Entradas exitosas por partido'
+            'successful_tackles_per_match': 'Entradas exitosas por partido',
+            'clearances_per_match': 'Clearances per match',
+            'possession_won_final_3rd_per_match': 'Possession won final 3rd per match',
+            'saves_per_match': 'Saves per match',
+            'fouls_per_match': 'Fouls per match',
+            'yellow_cards': 'Yellow cards',
+            'red_cards': 'Red cards'
         }
         
+        # ✅ CONSTRUIR OBJETO DE ESTADÍSTICAS EN FORMATO CORRECTO
         estadisticas = {}
         exclude = ['id', 'equipo']
         
@@ -850,16 +885,81 @@ def ajax_equipo_estadisticas(request, equipo_id):
             name = field.name
             if name not in exclude:
                 value = getattr(estadisticas_obj, name)
-                if value is not None:
-                    label = traducciones.get(name, name.replace("_", " ").capitalize())
+                if value is not None and value != '' and str(value) != '0':
+                    # Usar traducción o convertir nombre del campo
+                    label = traducciones.get(name, name.replace("_", " ").title())
                     estadisticas[label] = value
+        
+        # ✅ OBTENER LA ESTADÍSTICA ESPECÍFICA SI SE SOLICITA
+        stat_name = request.GET.get('stat')
+        estadistica_especifica = None
+        
+        if stat_name and stat_name in estadisticas:
+            valor_equipo = estadisticas[stat_name]
+            
+            # Calcular promedio y posición (simulado por ahora)
+            promedio_liga = float(valor_equipo) * 0.9 if isinstance(valor_equipo, (int, float)) else None
+            posicion_liga = 5  # Simulado
+            
+            estadistica_especifica = {
+                'valor_equipo': valor_equipo,
+                'promedio_liga': round(promedio_liga, 2) if promedio_liga else None,
+                'posicion_liga': posicion_liga
+            }
+        
+        # === DATOS PARA GRÁFICOS ===
+        # Radar: agrupa por tipo (puedes ajustar los grupos según tu modelo)
+        radar_grupos = {
+            'ofensivos': [
+                'Goles por partido', 'Goles esperados (xG)', 'Tiros al arco por partido', 'Ocasiones claras', 'Toques en área rival'
+            ],
+            'defensivos': [
+                'Goles concedidos por partido', 'Vallas invictas', 'Intercepciones por partido', 'Entradas exitosas por partido'
+            ],
+            'creacion': [
+                'Pases precisos por partido', 'Pases largos precisos por partido', 'Centros precisos por partido', 'Posesión promedio'
+            ],
+            'generales': [
+                'Rating FotMob', 'Faltas por partido', 'Yellow cards', 'Red cards'
+            ]
+        }
+        radar_data = {}
+        for grupo, labels in radar_grupos.items():
+            valores = []
+            for label in labels:
+                valor = estadisticas.get(label)
+                try:
+                    valor = float(valor)
+                except (TypeError, ValueError):
+                    valor = 0
+                valores.append(valor)
+            radar_data[grupo] = {
+                'labels': labels,
+                'valores': valores
+            }
+
+        # Boxplot: ejemplo simple (puedes mejorarlo)
+        boxplot_data = []
+        for label, valor in estadisticas.items():
+            try:
+                boxplot_data.append(float(valor))
+            except (TypeError, ValueError):
+                continue
+
+        datos_grafico = {
+            'radar': radar_data,
+            'boxplot': boxplot_data
+        }
         
         return JsonResponse({
             'estadisticas': estadisticas,
+            'estadistica': estadistica_especifica,
             'equipo': {
                 'id': equipo.id,
-                'nombre': equipo.nombre
+                'nombre': equipo.nombre,
+                'logo': equipo.logo
             },
+            'datos_grafico': datos_grafico,  # <--- AGREGA ESTO
             'status': 'success'
         })
         
@@ -869,6 +969,9 @@ def ajax_equipo_estadisticas(request, equipo_id):
             'status': 'error'
         }, status=404)
     except Exception as e:
+        print(f"❌ Error en ajax_equipo_estadisticas: {e}")
+        import traceback
+        traceback.print_exc()
         return JsonResponse({
             'error': str(e),
             'status': 'error'
@@ -896,7 +999,11 @@ def ajax_equipo_info(request, equipo_id):
     """API para obtener información básica de un equipo"""
     try:
         equipo = get_object_or_404(Equipo, id=equipo_id)
-        
+
+        # Obtener info de Wikipedia
+        from .wikipedia_info import obtener_info_wikipedia
+        wikipedia_info = obtener_info_wikipedia(equipo)
+
         equipo_data = {
             'id': equipo.id,
             'nombre': equipo.nombre,
@@ -904,12 +1011,13 @@ def ajax_equipo_info(request, equipo_id):
             'liga': equipo.liga,
             'logo': equipo.logo if equipo.logo else None,
         }
-        
+
         return JsonResponse({
             'equipo': equipo_data,
+            'wikipedia_info': wikipedia_info,  # <--- AGREGADO
             'status': 'success'
         })
-        
+
     except Exception as e:
         print(f"❌ Error en ajax_equipo_info: {e}")
         return JsonResponse({
@@ -1194,6 +1302,127 @@ def ajax_comparar_jugadores(request):
         
     except Exception as e:
         print(f"❌ Error en ajax_comparar_jugadores: {e}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+
+def ajax_radar_equipo(request):
+    """API para gráfico radar de equipos usando min/max reales y sentido correcto"""
+    try:
+        equipo_id = request.GET.get('equipo_id')
+        grupo = request.GET.get('grupo', 'ofensivos')
+        
+        if not equipo_id:
+            return JsonResponse({'error': 'ID de equipo requerido'}, status=400)
+        
+        equipo = get_object_or_404(Equipo, id=equipo_id)
+        estadisticas_obj = EstadisticasEquipo.objects.filter(equipo=equipo).first()
+        if not estadisticas_obj:
+            return JsonResponse({'error': 'Sin estadísticas disponibles'}, status=404)
+        
+        # Configuración de grupos y sentido de "mejor"
+        grupos_config = {
+            'ofensivos': {
+                'labels': ['Goles/partido', 'xG', 'Tiros/arco', 'Ocasiones', 'Toques área'],
+                'fields': ['goals_per_match', 'expected_goals_xg', 'shots_on_target_per_match', 'big_chances', 'touches_in_opposition_box'],
+                'mejor_menor': [False, False, False, False, False]
+            },
+            'defensivos': {
+                'labels': ['Goles concedidos', 'Vallas invictas', 'Intercepciones', 'Entradas exitosas'],
+                'fields': ['goals_conceded_per_match', 'clean_sheets', 'interceptions_per_match', 'successful_tackles_per_match'],
+                'mejor_menor': [True, False, False, False]  # Goles concedidos: mejor menos
+            },
+            'creacion': {
+                'labels': ['Pases precisos', 'Pases largos', 'Centros', 'Posesión'],
+                'fields': ['accurate_passes_per_match', 'accurate_long_balls_per_match', 'accurate_crosses_per_match', 'average_possession'],
+                'mejor_menor': [False, False, False, False]
+            },
+            'generales': {
+                'labels': ['Rating', 'Faltas', 'Amarillas', 'Rojas'],
+                'fields': ['fotmob_rating', 'fouls_per_match', 'yellow_cards', 'red_cards'],
+                'mejor_menor': [False, True, True, True]  # Faltas, amarillas, rojas: mejor menos
+            }
+        }
+        
+        config = grupos_config.get(grupo, grupos_config['ofensivos'])
+        labels = config['labels']
+        fields = config['fields']
+        mejor_menor = config['mejor_menor']
+        
+        valores_equipo = []
+        valores_liga = []
+        valores_min = []
+        valores_max = []
+        valores_normalizados = []
+        promedios_liga = []
+
+        for idx, field in enumerate(fields):
+            valor_equipo = getattr(estadisticas_obj, field, 0) or 0
+            try:
+                valor_equipo = float(valor_equipo)
+            except (TypeError, ValueError):
+                valor_equipo = 0.0
+            valores_equipo.append(valor_equipo)
+            
+            # Obtener todos los valores de la liga para ese campo
+            valores = list(
+                EstadisticasEquipo.objects.exclude(**{f"{field}__isnull": True})
+                .values_list(field, flat=True)
+            )
+            # Fuerza todos los valores a float y descarta los que no se puedan convertir
+            valores_float = []
+            for v in valores:
+                try:
+                    valores_float.append(float(v))
+                except (TypeError, ValueError):
+                    continue
+            if not valores_float:
+                valores_float = [0.0]
+            min_val = min(valores_float)
+            max_val = max(valores_float)
+            promedio = sum(valores_float) / len(valores_float) if valores_float else 0
+            valores_min.append(min_val)
+            valores_max.append(max_val)
+            promedios_liga.append(promedio)
+            
+            # Normalización: 0 (peor) a 100 (mejor)
+            if max_val == min_val:
+                normalizado = 50  # Si todos son iguales
+            else:
+                if mejor_menor[idx]:
+                    normalizado = 100 * (max_val - valor_equipo) / (max_val - min_val)
+                else:
+                    normalizado = 100 * (valor_equipo - min_val) / (max_val - min_val)
+            valores_normalizados.append(round(normalizado, 2))
+        
+        # Promedio liga normalizado
+        promedios_normalizados = []
+        for idx, promedio in enumerate(promedios_liga):
+            min_val = valores_min[idx]
+            max_val = valores_max[idx]
+            if max_val == min_val:
+                prom_norm = 50
+            else:
+                if mejor_menor[idx]:
+                    prom_norm = 100 * (max_val - promedio) / (max_val - min_val)
+                else:
+                    prom_norm = 100 * (promedio - min_val) / (max_val - min_val)
+            promedios_normalizados.append(round(prom_norm, 2))
+        
+        max_radar = 100  # Siempre 0-100
+
+        return JsonResponse({
+            'labels': labels,
+            'equipo': valores_normalizados,
+            'promedio': promedios_normalizados,
+            'max': max_radar,
+            'valores_raw': valores_equipo,
+            'valores_medianos': promedios_liga,
+            'minimos': valores_min,
+            'maximos': valores_max
+        })
+    except Exception as e:
+        print(f"❌ Error en ajax_radar_equipo: {e}")
         import traceback
         traceback.print_exc()
         return JsonResponse({'error': str(e)}, status=500)

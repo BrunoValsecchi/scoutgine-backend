@@ -1,9 +1,11 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from .models import EstadisticasJugador, Jugador
+from django.db import models
 import json
 import random
-# import numpy as np
+from django.views.decorators.csrf import csrf_exempt
+import traceback
 
 # Puedes poner esto como constantes en tu models.py o en un archivo utils.py
 
@@ -96,7 +98,6 @@ def calcular_estadisticas_cards(jugador, estadistica):
     campo_bd = mapeo_estadisticas.get(estadistica)
     
     if not campo_bd:
-        print(f"❌ Estadística '{estadistica}' no encontrada en el mapeo")
         return None, None, None
     
     try:
@@ -110,9 +111,8 @@ def calcular_estadisticas_cards(jugador, estadistica):
                     stat_value = round(stat_value, 2)
                 else:
                     stat_value = int(stat_value)
-            print(f"📊 Valor del jugador: {stat_value}")
         except EstadisticasJugador.DoesNotExist:
-            print(f"❌ No se encontraron estadísticas para el jugador {jugador.nombre}")
+            pass
         
         # 2. Calcular promedio de la liga
         promedio = None
@@ -126,9 +126,8 @@ def calcular_estadisticas_cards(jugador, estadistica):
                     promedio = round(promedio, 2)
                 else:
                     promedio = int(promedio)
-                print(f"📊 Promedio liga: {promedio}")
         except Exception as e:
-            print(f"❌ Error calculando promedio: {e}")
+            pass
         
         # 3. Calcular percentil
         percentil = None
@@ -140,14 +139,12 @@ def calcular_estadisticas_cards(jugador, estadistica):
                 if valores:
                     valores_menores = [v for v in valores if v < stat_value]
                     percentil = round((len(valores_menores) / len(valores)) * 100, 1)
-                    print(f"📊 Percentil: {percentil}%")
             except Exception as e:
-                print(f"❌ Error calculando percentil: {e}")
+                pass
         
         return stat_value, promedio, percentil
         
     except Exception as e:
-        print(f"❌ Error general en calcular_estadisticas_cards: {e}")
         return None, None, None
 
 def obtener_datos_estadistica(jugador, estadistica):
@@ -247,10 +244,25 @@ def generar_datos_ejemplo(estadistica, jugador):
 def ajax_radar_jugador(request):
     jugador_id = request.GET.get('jugador_id')
     grupo = request.GET.get('grupo', 'ofensivos')
-    posicion = request.GET.get('posicion')  # Nueva: posición seleccionada
+    posicion = request.GET.get('posicion')
 
     if not jugador_id:
-        return JsonResponse({'success': False, 'error': 'Falta jugador_id'})
+        return JsonResponse({'success': False, 'error': 'Faltan jugador_id'})
+
+    try:
+        jugador = Jugador.objects.get(id=jugador_id)
+        jugador_stats = EstadisticasJugador.objects.get(jugador_id=jugador_id)
+    except (Jugador.DoesNotExist, EstadisticasJugador.DoesNotExist):
+        return JsonResponse({'success': False, 'error': 'Jugador no encontrado'})
+
+    # ✅ USAR POSICIONES DEL CAMPO jugador.posicion
+    # El campo posicion puede tener múltiples posiciones separadas por comas
+    posiciones_raw = jugador.posicion or "CB"
+    posiciones_jugador = [p.strip() for p in posiciones_raw.split(',') if p.strip()]
+    
+    # Si no se especifica posición, usar la primera del jugador
+    if not posicion or posicion not in posiciones_jugador:
+        posicion = posiciones_jugador[0]
 
     GRUPOS = {
         'ofensivos': STATS_OFENSIVAS,
@@ -260,16 +272,6 @@ def ajax_radar_jugador(request):
     }
     campos = GRUPOS.get(grupo, STATS_OFENSIVAS)
     labels_nombres = [campo.replace('_', ' ').capitalize() for campo in campos]
-
-    try:
-        jugador = Jugador.objects.get(id=jugador_id)
-        jugador_stats = EstadisticasJugador.objects.get(jugador_id=jugador_id)
-    except (Jugador.DoesNotExist, EstadisticasJugador.DoesNotExist):
-        return JsonResponse({'success': False, 'error': 'Jugador no encontrado'})
-
-    # Si el jugador tiene varias posiciones, usa la seleccionada o la primera
-    posiciones_jugador = [p.strip() for p in jugador.posicion.split(',')]
-    posicion_base = posicion if posicion in posiciones_jugador else posiciones_jugador[0]
 
     percentiles_jugador = []
 
@@ -281,7 +283,7 @@ def ajax_radar_jugador(request):
 
     for campo in campos:
         # Solo jugadores con esa posición (en cualquier parte de la cadena)
-        jugadores_misma_pos = Jugador.objects.filter(posicion__icontains=posicion_base)
+        jugadores_misma_pos = Jugador.objects.filter(posicion__icontains=posicion)
         stats_misma_pos = EstadisticasJugador.objects.filter(jugador__in=jugadores_misma_pos).exclude(**{f"{campo}__isnull": True})
         valores = list(stats_misma_pos.values_list(campo, flat=True))
         valor_jugador = getattr(jugador_stats, campo, None)
@@ -296,8 +298,8 @@ def ajax_radar_jugador(request):
         'max': 100,
         'jugador': percentiles_jugador,
         'promedio': percentiles_promedio,
-        'posicion': posicion_base,
-        'posiciones_jugador': posiciones_jugador,
+        'posicion': posicion,
+        'posiciones_jugador': posiciones_jugador,  # ✅ POSICIONES DE LA TABLA JUGADOR
     })
 
 # --- Ranking, Evolución, Percentil AJAX endpoints ---
@@ -362,66 +364,229 @@ def ajax_grafico_dispersion_jugador(request):
     """
     Devuelve datos para scatter plot de jugadores según dos estadísticas, filtrando por posición.
     """
-    stat_x = request.GET.get('stat_x')
-    stat_y = request.GET.get('stat_y')
-    posicion = request.GET.get('posicion')
     jugador_id = request.GET.get('jugador_id')
+    stat_x = request.GET.get('stat_x', 'pass_accuracy_outfield')
+    stat_y = request.GET.get('stat_y', 'saves')
+    posicion = request.GET.get('posicion', 'CB')
 
-    if not stat_x or not posicion:
-        return JsonResponse({'success': False, 'error': 'Faltan parámetros obligatorios'})
+    if not jugador_id:
+        return JsonResponse({'success': False, 'error': 'Falta jugador_id'})
 
-    # Campos numéricos disponibles para el eje Y (todos los campos de estadísticas)
-    campos_numericos = [
-        'goals', 'expected_goals_xg', 'shots', 'shots_on_target', 'assists',
-        'penalties_awarded', 'goals_conceded', 'clean_sheets', 'tackles_won',
-        'interceptions', 'blocked', 'recoveries', 'saves', 'successful_passes',
-        'pass_accuracy_outfield', 'accurate_long_balls_outfield', 'successful_crosses',
-        'chances_created', 'touches_in_opposition_box', 'touches', 
-        'duels_won_percentage', 'aerial_duels_won_percentage', 'fouls_committed',
-        'yellow_cards', 'red_cards'
-    ]
-    
-    # Si no se especifica stat_y, usar la primera disponible diferente a stat_x
-    if not stat_y or stat_y not in campos_numericos:
-        stat_y = next((campo for campo in campos_numericos if campo != stat_x), 'assists')
-
-    # Filtrar jugadores por posición (usando el campo posicion del modelo Jugador)
-    jugadores_posicion = Jugador.objects.filter(posicion__icontains=posicion)
-    jugadores_ids = list(jugadores_posicion.values_list('id', flat=True))
-    
-    # Obtener estadísticas de esos jugadores
-    stats_qs = EstadisticasJugador.objects.filter(
-        jugador_id__in=jugadores_ids
-    ).exclude(**{f"{stat_x}__isnull": True}).exclude(**{f"{stat_y}__isnull": True}).select_related('jugador')
-
-    data = []
-    jugador_actual = None
-    
-    for stat in stats_qs:
-        x_val = getattr(stat, stat_x, None)
-        y_val = getattr(stat, stat_y, None)
+    try:
+        jugador = Jugador.objects.get(id=jugador_id)
         
-        if x_val is not None and y_val is not None:
+        # ✅ OBTENER POSICIONES DE LA TABLA JUGADOR
+        posiciones_raw = jugador.posicion or "CB"
+        posiciones_jugador = [p.strip() for p in posiciones_raw.split(',') if p.strip()]
+        
+        # Si no se especifica posición, usar la primera del jugador
+        if not posicion or posicion not in posiciones_jugador:
+            posicion = posiciones_jugador[0]
+        
+        # ✅ FUNCIÓN PARA FILTRAR JUGADORES POR POSICIÓN DE LA TABLA JUGADOR
+        def jugadores_con_posicion(pos):
+            return Jugador.objects.filter(
+                models.Q(posicion__icontains=pos) |
+                models.Q(posicion__startswith=pos) |
+                models.Q(posicion__endswith=pos) |
+                models.Q(posicion__exact=pos)
+            )
+        
+        # Obtener jugadores con la misma posición
+        jugadores_posicion = jugadores_con_posicion(posicion)
+        jugadores_ids = list(jugadores_posicion.values_list('id', flat=True))
+        
+        if not jugadores_ids:
+            return JsonResponse({'success': False, 'error': f'No hay jugadores en posición {posicion}'})
+        
+        # Mapear estadísticas a campos de BD
+        stat_x_bd = obtener_campo_estadistica(stat_x) or stat_x
+        stat_y_bd = obtener_campo_estadistica(stat_y) or stat_y
+        
+        # ✅ FILTRAR ESTADÍSTICAS POR LOS IDs DE JUGADORES CON ESA POSICIÓN
+        stats_qs = EstadisticasJugador.objects.filter(
+            jugador_id__in=jugadores_ids
+        ).exclude(**{f"{stat_x_bd}__isnull": True}).exclude(**{f"{stat_y_bd}__isnull": True}).select_related('jugador')
+        
+        # Si no hay datos después del filtro, usar todos los registros (incluyendo 0s)
+        if stats_qs.count() == 0:
+            print("⚠️ No hay datos después de filtrar nulls, usando todos los registros...")
+            stats_qs = EstadisticasJugador.objects.filter(
+                jugador_id__in=jugadores_ids
+            ).select_related('jugador')
+        
+        # Procesar datos para el gráfico
+        data = []
+        jugador_actual = None
+        
+        for stat in stats_qs:
+            x_val = getattr(stat, stat_x_bd, 0) or 0
+            y_val = getattr(stat, stat_y_bd, 0) or 0
+            
             punto = {
                 'nombre': stat.jugador.nombre,
                 'x': float(x_val),
                 'y': float(y_val),
-                'jugador_id': stat.jugador.id,
+                'jugador_id': stat.jugador.id
             }
-            if jugador_id and int(jugador_id) == stat.jugador.id:
-                jugador_actual = punto
+            
             data.append(punto)
+            
+            if stat.jugador.id == int(jugador_id):
+                jugador_actual = punto
+        
+        # Obtener opciones para el eje Y
+        campos_numericos = obtener_campos_numericos_estadisticas()
+        opciones_y = [{'value': campo, 'label': campo.replace('_', ' ').title()} for campo in campos_numericos]
+        
+        return JsonResponse({
+            'success': True,
+            'data': data,
+            'stat_x': stat_x_bd,
+            'stat_y': stat_y_bd,
+            'campos_y': campos_numericos,
+            'opciones_y': opciones_y,
+            'jugador_actual': jugador_actual,
+            'posicion': posicion,
+            'posiciones_jugador': posiciones_jugador,  # ✅ POSICIONES DE LA TABLA JUGADOR
+            'total_jugadores': len(data),
+            'debug_info': {
+                'stat_x_original': stat_x,
+                'stat_x_traducido': stat_x_bd,
+                'stat_y': stat_y,
+                'stat_y_traducido': stat_y_bd,
+                'posicion': posicion,
+                'jugadores_en_posicion': len(jugadores_ids),
+                'stats_con_datos': stats_qs.count(),
+                'puntos_validos': len(data)
+            }
+        })
+        
+    except Jugador.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Jugador no encontrado'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Error: {str(e)}'})
 
-    return JsonResponse({
-        'success': True,
-        'data': data,
-        'stat_x': stat_x,
-        'stat_y': stat_y,
-        'campos_y': campos_numericos,
-        'jugador_actual': jugador_actual,
-        'posicion': posicion,
-        'total_jugadores': len(data)
-    })
+def ajax_boxplot_jugador(request):
+    """
+    Devuelve datos para boxplot de una estadística específica de jugadores.
+    """
+    jugador_id = request.GET.get('jugador_id')
+    estadistica = request.GET.get('estadistica')
+    posicion = request.GET.get('posicion')
+
+    if not jugador_id or not estadistica:
+        return JsonResponse({'success': False, 'error': 'Faltan parámetros'})
+
+    try:
+        jugador = Jugador.objects.get(id=jugador_id)
+        
+        # ✅ OBTENER POSICIONES DE LA TABLA JUGADOR
+        posiciones_raw = jugador.posicion or "CB"
+        posiciones_jugador = [p.strip() for p in posiciones_raw.split(',') if p.strip()]
+        
+        # Si no se especifica posición, usar la primera del jugador
+        if not posicion or posicion not in posiciones_jugador:
+            posicion = posiciones_jugador[0]
+        
+        # ✅ FUNCIÓN PARA FILTRAR JUGADORES POR POSICIÓN DE LA TABLA JUGADOR
+        def jugadores_con_posicion(pos):
+            return Jugador.objects.filter(
+                models.Q(posicion__icontains=pos) |  # Contiene la posición
+                models.Q(posicion__startswith=pos) |  # Empieza con la posición
+                models.Q(posicion__endswith=pos) |    # Termina con la posición
+                models.Q(posicion__exact=pos)         # Es exactamente la posición
+            )
+        
+        # Obtener jugadores con la misma posición
+        jugadores_posicion = jugadores_con_posicion(posicion)
+        jugadores_ids = list(jugadores_posicion.values_list('id', flat=True))
+        
+        if not jugadores_ids:
+            return JsonResponse({'success': False, 'error': f'No hay jugadores en posición {posicion}'})
+        
+        # Mapear nombre de estadística a campo de BD
+        campo_bd = obtener_campo_estadistica(estadistica)
+        if not campo_bd:
+            return JsonResponse({'success': False, 'error': 'Estadística no válida'})
+        
+        # ✅ FILTRAR ESTADÍSTICAS POR LOS IDs DE JUGADORES CON ESA POSICIÓN
+        stats_qs = EstadisticasJugador.objects.filter(
+            jugador_id__in=jugadores_ids  # ← USAR jugador_id__in
+        ).exclude(**{f"{campo_bd}__isnull": True})
+        
+        # Obtener valores para el boxplot
+        valores = list(stats_qs.values_list(campo_bd, flat=True))
+        
+        if len(valores) < 5:
+            return JsonResponse({'success': False, 'error': f'No hay suficientes datos para {posicion}'})
+        
+        # Calcular estadísticas del boxplot
+        valores.sort()
+        n = len(valores)
+        q1 = valores[n // 4]
+        median = valores[n // 2]
+        q3 = valores[3 * n // 4]
+        iqr = q3 - q1
+        lower_whisker = max(min(valores), q1 - 1.5 * iqr)
+        upper_whisker = min(max(valores), q3 + 1.5 * iqr)
+        
+        # Obtener valor del jugador actual
+        try:
+            jugador_stat = EstadisticasJugador.objects.get(jugador_id=jugador_id)
+            valor_jugador = getattr(jugador_stat, campo_bd, None)
+        except EstadisticasJugador.DoesNotExist:
+            valor_jugador = None
+        
+        return JsonResponse({
+            'success': True,
+            'stat': estadistica,
+            'posicion': posicion,
+            'posiciones_jugador': posiciones_jugador,  # ✅ POSICIONES DE LA TABLA JUGADOR
+            'box': [lower_whisker, q1, median, q3, upper_whisker],
+            'valor_jugador': valor_jugador,
+            'total_jugadores': len(valores),
+            'jugador_nombre': jugador.nombre
+        })
+        
+    except Jugador.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Jugador no encontrado'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Error: {str(e)}'})
+
+@csrf_exempt
+def ajax_jugador_estadistica(request, jugador_id, estadistica):
+    try:
+        jugador = get_object_or_404(Jugador, id=jugador_id)
+        equipo = jugador.equipo if hasattr(jugador, 'equipo') else None
+
+        stat_value, promedio, percentil = calcular_estadisticas_cards(jugador, estadistica)
+        datos_grafico = obtener_datos_estadistica(jugador, estadistica)
+
+        return JsonResponse({
+            'jugador': {
+                'id': jugador.id,
+                'nombre': jugador.nombre,
+                'dorsal': getattr(jugador, 'dorsal', None),
+                'foto': getattr(jugador, 'foto', None),
+                'posicion': getattr(jugador, 'posicion', None),
+                'posicion_secundaria': getattr(jugador, 'posicion_secundaria', None),
+            },
+            'equipo': {
+                'id': equipo.id if equipo else None,
+                'nombre': equipo.nombre if equipo else None,
+                'logo': equipo.logo if equipo else None
+            } if equipo else None,
+            'estadistica': estadistica,
+            'estadisticas_hero': {
+                'valor_actual': stat_value,
+                'promedio_liga': promedio,
+                'percentil': percentil
+            },
+            'datos_grafico': datos_grafico
+        })
+    except Exception as e:
+        return JsonResponse({'error': f'{str(e)}', 'traceback': traceback.format_exc()}, status=500)
 
 def api_jugador_posiciones(request, jugador_id):
     """Devuelve las posiciones de un jugador"""
@@ -432,123 +597,63 @@ def api_jugador_posiciones(request, jugador_id):
     except Jugador.DoesNotExist:
         return JsonResponse({'success': False, 'posiciones': []})
 
-def ajax_boxplot_jugador(request):
+def jugadores_con_posicion(posicion):
     """
-    Devuelve datos para boxplot de una estadística específica de jugadores.
+    Devuelve un queryset de jugadores que tienen la posición dada,
+    considerando variantes como 'RB', 'RB,CB', 'CB,RB', 'RB / CB', etc.
     """
-    jugador_id = request.GET.get('jugador_id')
-    estadistica = request.GET.get('estadistica')
-    posicion = request.GET.get('posicion')
-    
-    if not jugador_id or not estadistica:
-        return JsonResponse({'success': False, 'error': 'Faltan parámetros obligatorios'})
+    from django.db.models import Q
+    # Quitar espacios y buscar coincidencias
+    return Jugador.objects.filter(
+        Q(posicion__iexact=posicion) |
+        Q(posicion__istartswith=posicion + ',') |
+        Q(posicion__iendswith=',' + posicion) |
+        Q(posicion__icontains=',' + posicion + ',') |
+        Q(posicion__icontains=posicion + ' /') |
+        Q(posicion__icontains='/ ' + posicion) |
+        Q(posicion__icontains='/' + posicion + '/') |
+        Q(posicion__icontains=posicion)
+    )
 
-    # Mapeo de nombres de estadística a campos del modelo
-    mapeo_estadisticas = {
-        'Goles': 'goals',
-        'Goles esperados (xG)': 'expected_goals_xg',
-        'Tiros al arco': 'shots_on_target',
-        'Tiros totales': 'shots',
-        'Asistencias': 'assists',
-        'Penales a favor': 'penalties_awarded',
-        'Ocasiones claras falladas': 'big_chances_missed',
-        'Goles concedidos': 'goals_conceded',
-        'Vallas invictas': 'clean_sheets',
-        'xG concedido': 'expected_goals_conceded_xgc',
-        'Entradas exitosas': 'tackles_won',
-        'Intercepciones': 'interceptions',
-        'Despejes': 'blocked',
-        'Recuperaciones último tercio': 'recoveries',
-        'Atajadas': 'saves',
-        'Pases precisos por partido': 'successful_passes',
+def obtener_campo_estadistica(nombre_estadistica):
+    """Mapea nombres de estadísticas a campos de la base de datos"""
+    mapeo = {
         'Precisión de pases': 'pass_accuracy_outfield',
-        'Pases largos precisos': 'accurate_long_balls_outfield',
-        'Centros precisos': 'successful_crosses',
-        'Ocasiones creadas': 'chances_created',
-        'Toques en área rival': 'touches_in_opposition_box',
-        'Tiros de esquina': 'corners_taken',
+        'pass_accuracy_outfield': 'pass_accuracy_outfield',
+        'Goles': 'goals',
+        'goals': 'goals',
+        'Asistencias': 'assists',
+        'assists': 'assists',
+        'Intercepciones': 'interceptions',
+        'interceptions': 'interceptions',
+        'Entradas exitosos': 'tackles_won',
+        'tackles_won': 'tackles_won',
+        'Atajadas': 'saves',
+        'saves': 'saves',
+        'Tiros al arco': 'shots_on_target',
+        'shots_on_target': 'shots_on_target',
         'Rating': 'average_rating',
+        'average_rating': 'average_rating',
         'Partidos jugados': 'appearances',
+        'appearances': 'appearances',
         'Minutos jugados': 'minutes_played',
-        'Posesión promedio': 'possession_percentage',
-        'Toques totales': 'touches',
-        'Duelos ganados': 'duels_won_percentage',
-        'Duelos aéreos ganados': 'aerial_duels_won_percentage',
-        'Faltas por partido': 'fouls_committed',
-        'Tarjetas amarillas': 'yellow_cards',
-        'Tarjetas rojas': 'red_cards',
+        'minutes_played': 'minutes_played',
+        'expected_goals_xg': 'expected_goals_xg',
+        'expected_assists_xa': 'expected_assists_xa',
+        'accurate_long_balls': 'accurate_long_balls',
     }
+    return mapeo.get(nombre_estadistica, None)
+
+def obtener_campos_numericos_estadisticas():
+    """Devuelve una lista de campos numéricos disponibles"""
+    from django.apps import apps
     
-    campo_bd = mapeo_estadisticas.get(estadistica, 'goals')
+    EstadisticasJugador = apps.get_model('myapp', 'EstadisticasJugador')
+    campos_numericos = []
     
-    try:
-        jugador = Jugador.objects.get(id=jugador_id)
-        
-        # Si no se especifica posición, usar la primera del jugador
-        if not posicion:
-            posiciones_jugador = [p.strip() for p in jugador.posicion.split(',')]
-            posicion = posiciones_jugador[0] if posiciones_jugador else 'ST'
-        
-        # Filtrar jugadores por posición
-        jugadores_posicion = Jugador.objects.filter(posicion__icontains=posicion)
-        stats_qs = EstadisticasJugador.objects.filter(
-            jugador__in=jugadores_posicion
-        ).exclude(**{f"{campo_bd}__isnull": True})
-        
-        # Obtener todos los valores de la estadística
-        valores = [float(getattr(stat, campo_bd, 0)) for stat in stats_qs]
-        valores = sorted([v for v in valores if v is not None])
-        
-        if len(valores) < 5:
-            return JsonResponse({
-                'success': False, 
-                'error': f'No hay suficientes datos para {estadistica} en posición {posicion}'
-            })
-        
-        # Calcular estadísticas para el boxplot con Python nativo
-        def calcular_percentil(valores_ordenados, percentil):
-            """Calcula percentil usando Python nativo"""
-            if not valores_ordenados:
-                return 0
-            n = len(valores_ordenados)
-            k = (percentil / 100) * (n - 1)
-            f = int(k)
-            c = k - f
-            if f == n - 1:
-                return valores_ordenados[f]
-            return valores_ordenados[f] * (1 - c) + valores_ordenados[f + 1] * c
-        
-        # Asegurar que valores está ordenado
-        valores_ordenados = sorted(valores)
-        
-        # Calcular quartiles
-        q1 = calcular_percentil(valores_ordenados, 25)
-        median = calcular_percentil(valores_ordenados, 50)
-        q3 = calcular_percentil(valores_ordenados, 75)
-        
-        # Calcular IQR y whiskers
-        iqr = q3 - q1
-        lower_whisker = max(min(valores_ordenados), q1 - 1.5 * iqr)
-        upper_whisker = min(max(valores_ordenados), q3 + 1.5 * iqr)
-        
-        # Valor del jugador actual
-        try:
-            jugador_stats = EstadisticasJugador.objects.get(jugador=jugador)
-            valor_jugador = float(getattr(jugador_stats, campo_bd, 0))
-        except EstadisticasJugador.DoesNotExist:
-            valor_jugador = None
-        
-        return JsonResponse({
-            'success': True,
-            'stat': estadistica,
-            'posicion': posicion,
-            'box': [lower_whisker, q1, median, q3, upper_whisker],
-            'valor_jugador': valor_jugador,
-            'total_jugadores': len(valores),
-            'jugador_nombre': jugador.nombre
-        })
-        
-    except Jugador.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Jugador no encontrado'})
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+    for field in EstadisticasJugador._meta.get_fields():
+        if field.get_internal_type() in ['FloatField', 'IntegerField', 'DecimalField']:
+            campos_numericos.append(field.name)
+    
+    return campos_numericos
+
