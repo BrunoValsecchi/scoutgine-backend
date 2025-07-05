@@ -143,6 +143,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8080",
     "http://127.0.0.1:5500",  # Por si usas Live Server de VS Code
     "http://localhost:5500",
+    "https://scoutgine-frontend.onrender.com",  # Tu frontend
+    "https://scoutgine-backend.onrender.com",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -164,6 +166,8 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8080",
     "http://localhost:8080",
+    "https://scoutgine-frontend.onrender.com",
+    "https://scoutgine-backend.onrender.com",
 ]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
