@@ -13,6 +13,7 @@ from .estadistica_jugador import (
     ajax_jugador_estadistica
 )
 from . import statsjugadores
+from .pago import crear_preferencia
 
 urlpatterns = [
     # ✅ PÁGINAS PRINCIPALES
@@ -65,4 +66,7 @@ urlpatterns = [
     path('ajax/grupos-stats-equipos/', views.ajax_grupos_stats_equipos, name='ajax_grupos_stats_equipos'),
     path('ajax/grupos-stats-jugadores/', views.ajax_grupos_stats_jugadores, name='ajax_grupos_stats_jugadores'),
     path('ajax/jugador/<int:jugador_id>/estadistica/<str:estadistica>/', ajax_jugador_estadistica, name='ajax_jugador_estadistica'),
+
+    # ✅ RUTAS PARA PAGO
+    path('api/crear-preferencia', crear_preferencia, name='crear_preferencia'),
 ]
