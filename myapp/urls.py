@@ -26,7 +26,10 @@ urlpatterns = [
     path('comparacion/', views.comparacion, name='comparacion'),
     path('recomendacion/', views.recomendacion, name='recomendacion'),
     path('jugador/<int:jugador_id>/', views.jugador_detalle, name='jugador_detalle'),
-    
+    path('ajax/admin/users/', views.ajax_admin_listar_usuarios, name='ajax_admin_listar_usuarios'),
+    path('ajax/admin/users/create/', views.ajax_admin_crear_usuario, name='ajax_admin_crear_usuario'),
+    path('ajax/admin/users/<str:user_id>/update/', views.ajax_admin_actualizar_usuario, name='ajax_admin_actualizar_usuario'),
+    path('ajax/admin/users/<str:user_id>/delete/', views.ajax_admin_eliminar_usuario, name='ajax_admin_eliminar_usuario'),
     # ✅ APIS AJAX ESPECÍFICAS (DEBEN IR ANTES QUE LAS GENÉRICAS)
     path('ajax/equipos/', views.ajax_equipos, name='ajax_equipos'),
     path('ajax/equipo/<int:equipo_id>/info/', views.ajax_equipo_info, name='ajax_equipo_info'),

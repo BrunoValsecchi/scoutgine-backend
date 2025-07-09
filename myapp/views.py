@@ -8,7 +8,10 @@ from .models import Posicion, Equipo, EstadisticasEquipo, Jugador
 import json
 import random
 from .estadistica_jugador import grafico_jugador_view
-from .comparacion import GRUPOS_STATS, GRUPOS_STATS_EQUIPOS, GRUPOS_STATS_JUGADORES# ============================================================================
+from .comparacion import GRUPOS_STATS, GRUPOS_STATS_EQUIPOS, GRUPOS_STATS_JUGADORES# 
+from .supabase_dashboard import listar_usuarios_supabase, actualizar_metadata_usuario_supabase, get_supabase_client
+from django.views.decorators.http import require_GET
+
 # VISTAS PRINCIPALES
 # ============================================================================
 
@@ -20,6 +23,20 @@ def grafico(request):
 
 def menu(request):
     return render(request, "menu.html")
+
+@csrf_exempt
+@require_GET
+def ajax_admin_listar_usuarios(request):
+    """
+    Endpoint para listar todos los usuarios de Supabase Auth (solo admin).
+    """
+    try:
+        # Aquí podrías validar que el requester es admin (por ejemplo, por sesión o token)
+        users = listar_usuarios_supabase()
+        return JsonResponse({'status': 'success', 'users': users, 'total': len(users)})
+    except Exception as e:
+        import traceback
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 def equipo(request):
     """Página principal de equipos"""
@@ -1434,52 +1451,54 @@ from django.views.decorators.http import require_http_methods
 import json
 
 @csrf_exempt
-@require_http_methods(["GET"])
-def get_users(request):
-    """Obtener todos los usuarios (solo para admins)"""
-    
-    # Verificar que el usuario sea admin
-    # (aquí deberías validar el token de Supabase)
-    
+@require_http_methods(["POST"])
+def ajax_admin_crear_usuario(request):
     try:
-        # Conectar a Supabase desde el backend
-        import os
-        from supabase import create_client, Client
-        
-        url = "https://gvgmhdxarjgvfykoyqyw.supabase.co"
-        key = os.environ.get("SUPABASE_SERVICE_KEY")  # Service Key, no anon key
-        
-        supabase: Client = create_client(url, key)
-        
-        # Obtener usuarios usando Admin API
-        users = supabase.auth.admin.list_users()
-        
-        # Mapear datos
-        users_data = []
-        for user in users.users:
-            users_data.append({
-                'id': user.id,
-                'email': user.email,
-                'nombre': user.user_metadata.get('nombre', 'Sin nombre'),
-                'apellido': user.user_metadata.get('apellido', ''),
-                'role': user.user_metadata.get('role', 'user'),
-                'subscription': user.user_metadata.get('subscription', 'free'),
-                'created_at': user.created_at,
-                'last_sign_in_at': user.last_sign_in_at,
-                'email_confirmed_at': user.email_confirmed_at
-            })
-        
-        return JsonResponse({
-            'status': 'success',
-            'users': users_data,
-            'total': len(users_data)
+        data = json.loads(request.body)
+        email = data.get('email')
+        password = data.get('password')  # <--- NUEVO
+        nombre = data.get('nombre', '')
+        role = data.get('role', 'user')
+        subscription = data.get('subscription', 'free')
+        supabase = get_supabase_client()
+        result = supabase.auth.admin.create_user({
+            "email": email,
+            "password": password,
+            "email_confirm": True,  # <-- Esto lo marca como verificado
+            "user_metadata": {
+                "nombre": nombre,
+                "role": role,
+                "subscription": subscription
+            }
         })
-        
+        return JsonResponse({'status': 'success', 'user': result.user.id})
     except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'message': str(e)
-        }, status=500)
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
-# Agregar a urls.py
-# path('ajax/admin/users/', views.get_users, name='get_users'),
+@csrf_exempt
+@require_http_methods(["PUT"])
+def ajax_admin_actualizar_usuario(request, user_id):
+    try:
+        data = json.loads(request.body)
+        nombre = data.get('nombre', '')
+        role = data.get('role', 'user')
+        subscription = data.get('subscription', 'free')
+        # Actualiza metadata
+        result = actualizar_metadata_usuario_supabase(user_id, {
+            "nombre": nombre,
+            "role": role,
+            "subscription": subscription
+        })
+        return JsonResponse({'status': 'success'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def ajax_admin_eliminar_usuario(request, user_id):
+    try:
+        supabase = get_supabase_client()
+        result = supabase.auth.admin.delete_user(user_id)
+        return JsonResponse({'status': 'success'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
