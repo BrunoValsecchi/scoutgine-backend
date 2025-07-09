@@ -17,5 +17,5 @@ python-decouple==3.8
 # ✅ UTILIDADES BÁSICAS
 requests==2.32.3
 wikipedia==1.4.0
-supabase==2.3.5
-supabase-py==2.3.4
+supabase
+supabase-py
