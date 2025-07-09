@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.utils.safestring import mark_safe
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from .models import Posicion, Equipo, EstadisticasEquipo, Jugador
 import json
 import random
@@ -1426,3 +1426,60 @@ def ajax_radar_equipo(request):
         import traceback
         traceback.print_exc()
         return JsonResponse({'error': str(e)}, status=500)
+
+# En tu backend/views.py o similar
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+import json
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_users(request):
+    """Obtener todos los usuarios (solo para admins)"""
+    
+    # Verificar que el usuario sea admin
+    # (aquí deberías validar el token de Supabase)
+    
+    try:
+        # Conectar a Supabase desde el backend
+        import os
+        from supabase import create_client, Client
+        
+        url = "https://gvgmhdxarjgvfykoyqyw.supabase.co"
+        key = os.environ.get("SUPABASE_SERVICE_KEY")  # Service Key, no anon key
+        
+        supabase: Client = create_client(url, key)
+        
+        # Obtener usuarios usando Admin API
+        users = supabase.auth.admin.list_users()
+        
+        # Mapear datos
+        users_data = []
+        for user in users.users:
+            users_data.append({
+                'id': user.id,
+                'email': user.email,
+                'nombre': user.user_metadata.get('nombre', 'Sin nombre'),
+                'apellido': user.user_metadata.get('apellido', ''),
+                'role': user.user_metadata.get('role', 'user'),
+                'subscription': user.user_metadata.get('subscription', 'free'),
+                'created_at': user.created_at,
+                'last_sign_in_at': user.last_sign_in_at,
+                'email_confirmed_at': user.email_confirmed_at
+            })
+        
+        return JsonResponse({
+            'status': 'success',
+            'users': users_data,
+            'total': len(users_data)
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+# Agregar a urls.py
+# path('ajax/admin/users/', views.get_users, name='get_users'),
